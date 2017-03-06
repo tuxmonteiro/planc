@@ -11,15 +11,19 @@ import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.zalando.boot.etcd.EtcdClient;
+import org.zalando.boot.etcd.EtcdNode;
 
+import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class PathInitializerHandler implements HttpHandler {
 
-    private StringRedisTemplate template;
+    private EtcdClient template;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -30,7 +34,7 @@ public class PathInitializerHandler implements HttpHandler {
         this.pathGlobHandler = pathGlobHandler;
     }
 
-    public PathInitializerHandler setTemplate(StringRedisTemplate template) {
+    public PathInitializerHandler setTemplate(final EtcdClient template) {
         this.template = template;
         return this;
     }
@@ -38,26 +42,41 @@ public class PathInitializerHandler implements HttpHandler {
     @Override
     public synchronized void handleRequest(HttpServerExchange exchange) throws Exception {
         String host = exchange.getRequestHeaders().get(Headers.HOST_STRING).getFirst();
-        if (paths.isEmpty()) {
-            final Set<String> pathsRegistered = template.keys(Application.PREFIX + "@" + host + "@path@*");
-            if (!pathsRegistered.isEmpty()) {
-                pathsRegistered.forEach(keyComplete -> {
-                    int orderFromIndex = keyComplete.lastIndexOf("@");
-                    int order = Integer.valueOf(keyComplete.substring(orderFromIndex + 1, keyComplete.length()));
-                    int pathFromIndex = keyComplete.substring(0, orderFromIndex - 1).lastIndexOf('@');
-                    String path = keyComplete.substring(pathFromIndex + 1, orderFromIndex);
-                    final ProxyPoolInitializerHandler proxyPoolInitializerHandler = new ProxyPoolInitializerHandler(pathGlobHandler, path, order);
-                    proxyPoolInitializerHandler.setTemplate(template);
-                    pathGlobHandler.addPath(path, order, proxyPoolInitializerHandler);
-                    paths.add(path);
+        final String virtualhostNodeName = "/" + Application.PREFIX + "/virtualhosts/" + host;
+        final String pathNodeName = virtualhostNodeName + "/path";
 
-                    logger.info("add path " + path + " [" + order +"] (" +
-                            "pathGlobHandler: " + pathGlobHandler.hashCode() + ", " +
-                            "proxyPoolInitializerHandler: " + proxyPoolInitializerHandler.hashCode() + ")");
-                });
-                pathGlobHandler.setDefaultHandler(ResponseCodeHandler.HANDLE_500);
-                pathGlobHandler.handleRequest(exchange);
-                return;
+        if (paths.isEmpty()) {
+            List<EtcdNode> hostNodes = Optional.ofNullable(template.get(virtualhostNodeName).getNode().getNodes()).orElse(Collections.emptyList());
+            boolean existPath = hostNodes.stream().filter(node -> node.getKey().equals(pathNodeName)).count() != 0;
+            if (existPath) {
+                final EtcdNode pathsNode = template.get(pathNodeName).getNode();
+                final List<EtcdNode> pathsRegistered = Optional.ofNullable(pathsNode.getNodes()).orElse(Collections.emptyList());
+                if (!pathsRegistered.isEmpty()) {
+                    pathsRegistered.stream().filter(EtcdNode::isDir).forEach(keyComplete -> {
+                        String pathKey = keyComplete.getKey();
+                        int pathFromIndex = pathKey.lastIndexOf("/");
+                        String path = pathKey.substring(pathFromIndex + 1, pathKey.length());
+                        final EtcdNode nodeWithZero = new EtcdNode();
+                        nodeWithZero.setValue("0");
+                        int order = Integer.valueOf(Optional.ofNullable(keyComplete.getNodes()).orElse(Collections.emptyList()).stream()
+                                .filter(n -> n.getKey().equals("order")).findAny().orElse(nodeWithZero).getValue());
+                        String pathDecoded = new String(Base64.getDecoder().decode(path)).trim();
+                        final ProxyPoolInitializerHandler proxyPoolInitializerHandler = new ProxyPoolInitializerHandler(pathGlobHandler, pathKey, order);
+                        proxyPoolInitializerHandler.setTemplate(template);
+                        pathGlobHandler.addPath(pathDecoded, order, proxyPoolInitializerHandler);
+                        paths.add(pathDecoded);
+
+                        logger.info("add path " + pathDecoded + " [" + order + "] (" +
+                                "pathGlobHandler: " + pathGlobHandler.hashCode() + ", " +
+                                "proxyPoolInitializerHandler: " + proxyPoolInitializerHandler.hashCode() + ")");
+                    });
+                    pathGlobHandler.setDefaultHandler(ResponseCodeHandler.HANDLE_500);
+                    pathGlobHandler.handleRequest(exchange);
+                    return;
+                }
+                logger.warn("pathRegistered is empty");
+            } else {
+                logger.warn(pathNodeName + " not found");
             }
         }
         String pathRequested = exchange.getRelativePath();

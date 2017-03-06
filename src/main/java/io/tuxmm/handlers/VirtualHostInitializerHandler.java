@@ -12,15 +12,16 @@ import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
+import org.zalando.boot.etcd.EtcdClient;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 public class VirtualHostInitializerHandler implements HttpHandler {
 
-    private StringRedisTemplate template;
+    private EtcdClient template;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -31,15 +32,33 @@ public class VirtualHostInitializerHandler implements HttpHandler {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
     }
 
-    public VirtualHostInitializerHandler setTemplate(final StringRedisTemplate template) {
+    public VirtualHostInitializerHandler setTemplate(final EtcdClient template) {
         this.template = template;
         return this;
     }
 
     @Override
     public synchronized void handleRequest(HttpServerExchange exchange) throws Exception {
-        String host = exchange.getRequestHeaders().get(Headers.HOST_STRING).getFirst();
-        if (template.hasKey(Application.PREFIX + "@" + host)) {
+        final String host = exchange.getRequestHeaders().get(Headers.HOST_STRING).getFirst();
+        final String prefixNodeName = "/" + Application.PREFIX;
+        final String virtualhostNodePrefix = prefixNodeName + "/virtualhosts";
+        final String virtualhostNodeName = virtualhostNodePrefix + "/" + host;
+        boolean existVirtualhostPath = Optional.ofNullable(template.get(prefixNodeName).getNode().getNodes()).orElse(Collections.emptyList())
+                                    .stream()
+                                    .filter(node -> node.getKey().equals(virtualhostNodePrefix))
+                                    .count() != 0;
+        if (!existVirtualhostPath) {
+            logger.error(virtualhostNodePrefix + " not found");
+            ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
+            return;
+        }
+
+        boolean existHost = Optional.ofNullable(template.get(virtualhostNodePrefix).getNode().getNodes()).orElse(Collections.emptyList())
+                .stream()
+                .filter(node -> node.getKey().equals(virtualhostNodeName))
+                .count() != 0;
+
+        if (existHost) {
             if (virtualhosts.add(host)) {
                 final PathGlobHandler pathGlobHandler = new PathGlobHandler();
                 pathGlobHandler.setDefaultHandler(new PathInitializerHandler(pathGlobHandler).setTemplate(template));
@@ -50,6 +69,7 @@ public class VirtualHostInitializerHandler implements HttpHandler {
             nameVirtualHostHandler.handleRequest(exchange);
             return;
         }
+        logger.error("vh " + host + " not exit (" + virtualhostNodeName + ")");
         ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
     }
 
