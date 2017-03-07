@@ -4,6 +4,8 @@
 
 package io.github.tuxmonteiro.planc.client;
 
+import io.undertow.server.HttpServerExchange;
+
 public class HostSelectorInitializer implements ExtendedLoadBalancingProxyClient.HostSelector {
 
     private ExtendedLoadBalancingProxyClient.HostSelector hostSelector = new LeastConnHostSelector();
@@ -14,7 +16,7 @@ public class HostSelectorInitializer implements ExtendedLoadBalancingProxyClient
     }
 
     @Override
-    public int selectHost(ExtendedLoadBalancingProxyClient.Host[] availableHosts) {
-        return hostSelector.selectHost(availableHosts);
+    public int selectHost(final ExtendedLoadBalancingProxyClient.Host[] availableHosts, final HttpServerExchange exchange) {
+        return hostSelector.selectHost(availableHosts, exchange);
     }
 }

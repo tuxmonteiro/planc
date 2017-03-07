@@ -287,7 +287,7 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
                 return sticky;
             }
         }
-        int host = hostSelector.selectHost(hosts);
+        int host = hostSelector.selectHost(hosts, exchange);
 
         final int startHost = host; //if the all hosts have problems we come back to this one
         Host full = null;
@@ -405,7 +405,7 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
 
     public interface HostSelector {
 
-        int selectHost(Host[] availableHosts);
+        int selectHost(Host[] availableHosts, HttpServerExchange exchange);
     }
 
 }
