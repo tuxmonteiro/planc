@@ -14,7 +14,6 @@ import io.undertow.server.handlers.Cookie;
 import io.undertow.server.handlers.proxy.ConnectionPoolErrorHandler;
 import io.undertow.server.handlers.proxy.ConnectionPoolManager;
 import io.undertow.server.handlers.proxy.ExclusivityChecker;
-import io.undertow.server.handlers.proxy.LoadBalancingProxyClient;
 import io.undertow.server.handlers.proxy.ProxyCallback;
 import io.undertow.server.handlers.proxy.ProxyClient;
 import io.undertow.server.handlers.proxy.ProxyConnection;
@@ -27,15 +26,10 @@ import org.xnio.ssl.XnioSsl;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 import static io.undertow.server.handlers.proxy.ProxyConnectionPool.AvailabilityType.*;
 import static org.xnio.IoUtils.safeClose;
@@ -414,29 +408,4 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
         int selectHost(Host[] availableHosts);
     }
 
-    public static class RoundRobinHostSelector implements HostSelector {
-
-        private final AtomicInteger currentHost = new AtomicInteger(0);
-
-        @Override
-        public int selectHost(Host[] availableHosts) {
-            return currentHost.incrementAndGet() % availableHosts.length;
-        }
-    }
-
-    public static class LeastConnHostSelector implements HostSelector {
-
-        @Override
-        public int selectHost(final Host[] availableHosts) {
-            return IntStream.range(0, availableHosts.length)
-                    .boxed()
-                    .collect(Collectors.toMap(i -> i, i -> availableHosts[i]))
-                    .entrySet()
-                    .stream()
-                    .sorted(Comparator.comparing(e -> e.getValue().getOpenConnection()))
-                    .findFirst()
-                    .map(Map.Entry::getKey)
-                    .orElse(0);
-        }
-    }
 }

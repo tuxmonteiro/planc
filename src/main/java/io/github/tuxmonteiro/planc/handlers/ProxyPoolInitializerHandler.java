@@ -5,11 +5,13 @@
 package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.Application;
+import io.github.tuxmonteiro.planc.client.ExtendedLoadBalancingProxyClient;
+import io.github.tuxmonteiro.planc.client.HostSelectorAlgorithm;
+import io.github.tuxmonteiro.planc.client.HostSelectorInitializer;
 import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;
-import io.undertow.server.handlers.proxy.LoadBalancingProxyClient;
 import io.undertow.server.handlers.proxy.ProxyHandler;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
@@ -30,8 +32,8 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final PathGlobHandler pathGlobHandler;
-    private final LoadBalancingProxyClient.HostSelector hostSelectorInicializer = new HostSelectorInicializer();
-    private final ExtendedLoadBalancingProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(hostSelectorInicializer);
+    private final HostSelectorInitializer hostSelectorInicializer = new HostSelectorInitializer();
+    private final ExtendedLoadBalancingProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), null, hostSelectorInicializer);
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
     private final String pathKey;
     private final int order;
@@ -59,7 +61,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         final EtcdNode nodeEmpty = new EtcdNode();
         nodeEmpty.setValue("");
 
-        if (proxyClient.isHostsNull(exchange)) {
+        if (proxyClient.isHostsEmpty()) {
 
             final List<EtcdNode> pathsRegistered = Optional.ofNullable(template.get(pathNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
 
@@ -84,9 +86,14 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                             "hostSelectorInicializer: " + hostSelectorInicializer.hashCode() + ")");
 
                     List<EtcdNode> targets = Optional.ofNullable(poolOfPathSelected.getNodes()).orElse(Collections.emptyList());
-                    targets.stream().map(EtcdNode::getValue).forEach(target -> {
-                        proxyClient.addHost(URI.create(target));
-                        logger.info("added target " + target);
+                    targets.forEach(target -> {
+                        if (target.getKey().equals(poolNodeName + "/" + poolName + "/loadbalance")) {
+                            hostSelectorInicializer.setHostSelector(HostSelectorAlgorithm.valueOf(target.getValue()).getHostSelector());
+                            logger.info("LoadBalance algorithm: " + target.getValue());
+                        } else {
+                            proxyClient.addHost(URI.create(target.getValue()));
+                            logger.info("added target " + target.getValue());
+                        }
                     });
                 } else {
                     logger.warn("pool " + poolName + " is empty [" + poolNodeName + "/" + poolName + "]");
@@ -96,8 +103,8 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                 String pathDecoded = new String(Base64.getDecoder().decode(path));
                 pathGlobHandler.addPath(pathDecoded, order, proxyHandler);
                 proxyHandler.handleRequest(exchange);
-                if (proxyClient.isHostsNull(exchange)) {
-                    logger.error("hosts is null");
+                if (proxyClient.isHostsEmpty()) {
+                    logger.error("hosts is empty");
                 }
                 return;
             }
@@ -106,21 +113,4 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         this.defaultHandler.handleRequest(exchange);
     }
 
-    private static class ExtendedLoadBalancingProxyClient extends LoadBalancingProxyClient {
-
-        ExtendedLoadBalancingProxyClient(HostSelector hostSelectorInicializer) {
-            super(UndertowClient.getInstance(), null, hostSelectorInicializer);
-        }
-
-        boolean isHostsNull(HttpServerExchange exchange) {
-            return super.selectHost(exchange) == null;
-        }
-    }
-
-    private class HostSelectorInicializer implements LoadBalancingProxyClient.HostSelector {
-        @Override
-        public int selectHost(LoadBalancingProxyClient.Host[] hosts) {
-            return 0;
-        }
-    }
 }
