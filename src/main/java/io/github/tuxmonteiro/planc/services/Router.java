@@ -2,9 +2,9 @@
  *
  */
 
-package io.tuxmm.services;
+package io.github.tuxmonteiro.planc.services;
 
-import io.tuxmm.handlers.VirtualHostInitializerHandler;
+import io.github.tuxmonteiro.planc.handlers.VirtualHostInitializerHandler;
 import io.undertow.Undertow;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import org.slf4j.Logger;

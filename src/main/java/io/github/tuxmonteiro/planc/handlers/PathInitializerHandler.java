@@ -2,9 +2,9 @@
  *
  */
 
-package io.tuxmm.handlers;
+package io.github.tuxmonteiro.planc.handlers;
 
-import io.tuxmm.Application;
+import io.github.tuxmonteiro.planc.Application;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;

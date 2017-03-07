@@ -2,9 +2,9 @@
  *
  */
 
-package io.tuxmm.services;
+package io.github.tuxmonteiro.planc.services;
 
-import io.tuxmm.Application;
+import io.github.tuxmonteiro.planc.Application;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;

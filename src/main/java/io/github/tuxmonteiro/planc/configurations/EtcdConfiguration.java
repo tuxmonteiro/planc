@@ -2,7 +2,7 @@
  *
  */
 
-package io.tuxmm.configurations;
+package io.github.tuxmonteiro.planc.configurations;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

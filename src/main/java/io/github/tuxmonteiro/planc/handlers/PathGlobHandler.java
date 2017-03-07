@@ -2,7 +2,7 @@
  *
  *
  */
-package io.tuxmm.handlers;
+package io.github.tuxmonteiro.planc.handlers;
 
 import java.util.Collections;
 import java.util.Map;

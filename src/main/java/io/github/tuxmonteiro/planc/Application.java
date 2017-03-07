@@ -2,7 +2,7 @@
  *
  */
 
-package io.tuxmm;
+package io.github.tuxmonteiro.planc;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
