@@ -2,7 +2,9 @@
  *
  */
 
-package io.github.tuxmonteiro.planc.client;
+package io.github.tuxmonteiro.planc.client.hostselectors;
+
+import io.github.tuxmonteiro.planc.client.ExtendedLoadBalancingProxyClient;
 
 public enum HostSelectorAlgorithm {
     ROUNDROBIN (new RoundRobinHostSelector()),

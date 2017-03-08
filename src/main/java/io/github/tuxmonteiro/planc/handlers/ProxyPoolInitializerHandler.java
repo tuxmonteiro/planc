@@ -6,8 +6,8 @@ package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.client.ExtendedLoadBalancingProxyClient;
-import io.github.tuxmonteiro.planc.client.HostSelectorAlgorithm;
-import io.github.tuxmonteiro.planc.client.HostSelectorInitializer;
+import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorAlgorithm;
+import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorInitializer;
 import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;

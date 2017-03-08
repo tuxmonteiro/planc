@@ -4,6 +4,7 @@
 
 package io.github.tuxmonteiro.planc.client;
 
+import io.github.tuxmonteiro.planc.client.hostselectors.RoundRobinHostSelector;
 import io.undertow.UndertowLogger;
 import io.undertow.client.ClientConnection;
 import io.undertow.client.ClientStatistics;

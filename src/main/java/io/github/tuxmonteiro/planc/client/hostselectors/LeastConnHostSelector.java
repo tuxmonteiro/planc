@@ -2,8 +2,9 @@
  *
  */
 
-package io.github.tuxmonteiro.planc.client;
+package io.github.tuxmonteiro.planc.client.hostselectors;
 
+import io.github.tuxmonteiro.planc.client.ExtendedLoadBalancingProxyClient;
 import io.undertow.server.HttpServerExchange;
 
 import java.util.Comparator;
