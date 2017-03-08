@@ -9,7 +9,7 @@ import io.undertow.server.HttpServerExchange;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class RoundRobinHostSelector implements ExtendedLoadBalancingProxyClient.HostSelector {
+public class RoundRobinHostSelector implements HostSelector {
 
     private final AtomicInteger currentHost = new AtomicInteger(0);
 

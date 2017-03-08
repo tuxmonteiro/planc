@@ -4,6 +4,7 @@
 
 package io.github.tuxmonteiro.planc.client;
 
+import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
 import io.github.tuxmonteiro.planc.client.hostselectors.RoundRobinHostSelector;
 import io.undertow.UndertowLogger;
 import io.undertow.client.ClientConnection;
@@ -402,11 +403,6 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
 
         private ProxyConnection connection;
 
-    }
-
-    public interface HostSelector {
-
-        int selectHost(Host[] availableHosts, HttpServerExchange exchange);
     }
 
 }
