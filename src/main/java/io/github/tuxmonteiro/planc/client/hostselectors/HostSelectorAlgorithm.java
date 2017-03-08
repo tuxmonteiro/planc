@@ -6,7 +6,8 @@ package io.github.tuxmonteiro.planc.client.hostselectors;
 
 public enum HostSelectorAlgorithm {
     ROUNDROBIN (new RoundRobinHostSelector()),
-    LEASTCONN (new LeastConnHostSelector());
+    LEASTCONN (new LeastConnHostSelector()),
+    HASH_SOURCEIP (new HashSourceIpHostSelector());
 
     private final HostSelector hostSelector;
     public HostSelector getHostSelector() { return hostSelector; }
