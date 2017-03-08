@@ -1,6 +1,14 @@
 PLANC
 
-1. Defining routes in etcd service
+1. Using etcd docker service
+
+# docker run --rm --name myetcd -d -p 2379:2379 -p 2380:2380 -p 4001:4001 -p 7001:7001 elcolio/etcd:latest -name etcd0
+
+2. Accessing etcd docker service
+
+# docker exec -it myetcd /bin/sh
+
+3. Defining routes in etcd service
 
 # etcdctl mkdir /PLANC/virtualhosts/teste
 # etcdctl mkdir /PLANC/virtualhosts/teste/path
@@ -12,10 +20,10 @@ PLANC
 # etcdctl set /PLANC/pools/0/loadbalance ROUNDROBIN
 # etcdctl set /PLANC/pools/0/0 http://127.0.0.1:8080
 
-2. Resetting all
+4. Resetting all
 
-# etcdctl set /PLANC/reset_all 0
+# etcdctl set /PLANC/reset_all 0 --ttl 5
 
-3. Disable "resetting all"
+5. Resetting only one virtualhost
 
-# etcdctl rm /PLANC/reset_all 0
+# etcdctl set /PLANC/reset/teste teste
