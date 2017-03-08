@@ -15,6 +15,7 @@ PLANC
 # etcdctl mkdir /PLANC/virtualhosts/teste/path/$(echo '/' | base64)
 # etcdctl set /PLANC/virtualhosts/teste/path/$(echo '/' | base64)/order 0
 # etcdctl set /PLANC/virtualhosts/teste/path/$(echo '/' | base64)/target 0
+# etcdctl set /PLANC/virtualhosts/teste/path/$(echo '/' | base64)/type PATH
 # etcdctl mkdir /PLANC/pools
 # etcdctl mkdir /PLANC/pools/0
 # etcdctl set /PLANC/pools/0/loadbalance ROUNDROBIN
