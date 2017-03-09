@@ -31,17 +31,17 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final PathGlobHandler pathGlobHandler;
+    private final HttpHandler parentHandler;
     private final HostSelectorInitializer hostSelectorInicializer = new HostSelectorInitializer();
     private final ExtendedLoadBalancingProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), null, hostSelectorInicializer);
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
-    private final String pathKey;
+    private final String ruleKey;
     private final int order;
     private ProxyHandler proxyHandler = new ProxyHandler(proxyClient, defaultHandler);
 
-    ProxyPoolInitializerHandler(final PathGlobHandler pathGlobHandler, final String pathKey, final int order) {
-        this.pathGlobHandler = pathGlobHandler;
-        this.pathKey = pathKey;
+    ProxyPoolInitializerHandler(final HttpHandler parentHandler, final String ruleKey, final int order) {
+        this.parentHandler = parentHandler;
+        this.ruleKey = ruleKey;
         this.order = order;
     }
 
@@ -56,18 +56,18 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         final String prefixNodeName = "/" + Application.PREFIX;
         final String virtualhostNodePrefix = prefixNodeName + "/virtualhosts";
         final String virtualhostNodeName = virtualhostNodePrefix + "/" + host;
-        final String pathNodeName = virtualhostNodeName + "/path";
+        final String rulesNodeName = virtualhostNodeName + "/rules";
         final String poolNodeName = prefixNodeName + "/pools";
         final EtcdNode nodeEmpty = new EtcdNode();
         nodeEmpty.setValue("");
 
         if (proxyClient.isHostsEmpty()) {
 
-            final List<EtcdNode> pathsRegistered = Optional.ofNullable(template.get(pathNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
+            final List<EtcdNode> rulesRegistered = Optional.ofNullable(template.get(rulesNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
 
-            final EtcdNode pathNode = pathsRegistered.stream().filter(p -> p.getKey().equals(pathKey)).findAny().orElse(nodeEmpty);
-            final String poolName = Optional.ofNullable(pathNode.getNodes()).orElse(Collections.emptyList()).stream()
-                    .filter(n -> n.getKey().equals(pathKey + "/target")).findAny().orElse(nodeEmpty).getValue();
+            final EtcdNode ruleNode = rulesRegistered.stream().filter(p -> p.getKey().equals(ruleKey)).findAny().orElse(nodeEmpty);
+            final String poolName = Optional.ofNullable(ruleNode.getNodes()).orElse(Collections.emptyList()).stream()
+                    .filter(n -> n.getKey().equals(ruleKey + "/target")).findAny().orElse(nodeEmpty).getValue();
 
             if ("".equals(poolName)) {
                 this.defaultHandler.handleRequest(exchange);
@@ -77,15 +77,15 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
             final List<EtcdNode> poolsRegistered = Optional.ofNullable(template.get(poolNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
 
             if (!poolsRegistered.isEmpty()) {
-                EtcdNode poolOfPathSelected = poolsRegistered.stream().filter(p -> p.isDir() && p.getKey().equals(poolNodeName + "/" + poolName)).findAny().orElse(nodeEmpty);
-                if (!"".equals(poolOfPathSelected.getKey())) {
+                EtcdNode poolOfRuleSelected = poolsRegistered.stream().filter(p -> p.isDir() && p.getKey().equals(poolNodeName + "/" + poolName)).findAny().orElse(nodeEmpty);
+                if (!"".equals(poolOfRuleSelected.getKey())) {
                     logger.info("creating targetsPool (" +
-                            "pathGlobHandler: " + pathGlobHandler.hashCode() + ", " +
+                            "parentHandler: " + parentHandler.hashCode() + ", " +
                             "proxyHandler: " + proxyHandler.hashCode() + ", " +
                             "proxyClient: " + proxyClient.hashCode() + ", " +
                             "hostSelectorInicializer: " + hostSelectorInicializer.hashCode() + ")");
 
-                    List<EtcdNode> targets = Optional.ofNullable(poolOfPathSelected.getNodes()).orElse(Collections.emptyList());
+                    List<EtcdNode> targets = Optional.ofNullable(poolOfRuleSelected.getNodes()).orElse(Collections.emptyList());
                     targets.forEach(target -> {
                         if (target.getKey().equals(poolNodeName + "/" + poolName + "/loadbalance")) {
                             hostSelectorInicializer.setHostSelector(HostSelectorAlgorithm.valueOf(target.getValue()).getHostSelector());
@@ -98,10 +98,12 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                 } else {
                     logger.warn("pool " + poolName + " is empty [" + poolNodeName + "/" + poolName + "]");
                 }
-                int pathFromIndex = pathKey.lastIndexOf("/");
-                String path = pathKey.substring(pathFromIndex + 1, pathKey.length());
-                String pathDecoded = new String(Base64.getDecoder().decode(path));
-                pathGlobHandler.addPath(pathDecoded, order, proxyHandler);
+                int ruleFromIndex = ruleKey.lastIndexOf("/");
+                String rule = ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
+                String ruleDecoded = new String(Base64.getDecoder().decode(rule));
+                if (parentHandler instanceof PathGlobHandler) {
+                    ((PathGlobHandler) parentHandler).addPath(ruleDecoded, order, proxyHandler);
+                }
                 proxyHandler.handleRequest(exchange);
                 if (proxyClient.isHostsEmpty()) {
                     logger.error("hosts is empty");

@@ -21,6 +21,10 @@ public class PathGlobHandler implements HttpHandler {
 
     private HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
 
+    public PathGlobHandler(HttpHandler defaultHandler) {
+        this.defaultHandler = defaultHandler;
+    }
+
     @Override
     public void handleRequest(HttpServerExchange exchange) throws Exception {
         if (paths.isEmpty()) {

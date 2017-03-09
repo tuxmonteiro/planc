@@ -60,7 +60,7 @@ public class VirtualHostInitializerHandler implements HttpHandler {
 
         if (existHost) {
             if (virtualhosts.add(host)) {
-                nameVirtualHostHandler.setDefaultHandler(new PathInitializerHandler(nameVirtualHostHandler).setTemplate(template));
+                nameVirtualHostHandler.setDefaultHandler(new RuleInitializerHandler(nameVirtualHostHandler).setTemplate(template));
 
                 logger.info("add vh " + host + " (nameVirtualHostHandler: " + nameVirtualHostHandler.hashCode() + ")");
             }
@@ -84,8 +84,8 @@ public class VirtualHostInitializerHandler implements HttpHandler {
             if (httpHandler instanceof PathGlobHandler) {
                 ((PathGlobHandler) httpHandler).clear();
                 HttpHandler defaultHandler = ((PathGlobHandler) httpHandler).getDefaultHandler();
-                if (defaultHandler instanceof PathInitializerHandler) {
-                    ((PathInitializerHandler) defaultHandler).reset();
+                if (defaultHandler instanceof RuleInitializerHandler) {
+                    ((RuleInitializerHandler) defaultHandler).reset();
                 }
             }
         }
