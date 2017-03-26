@@ -13,6 +13,8 @@ import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.server.handlers.proxy.ProxyHandler;
+import io.undertow.util.HeaderMap;
+import io.undertow.util.HeaderValues;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,7 @@ import java.util.Optional;
 
 public class ProxyPoolInitializerHandler implements HttpHandler {
 
+    public static final String X_FAKE_TARGET = "X-Fake-Target";
     private EtcdClient template;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
@@ -52,7 +55,18 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
 
     @Override
     public void handleRequest(HttpServerExchange exchange) throws Exception {
-        String host = exchange.getRequestHeaders().get(Headers.HOST_STRING).getFirst();
+        final HeaderMap requestHeaders = exchange.getRequestHeaders();
+        final HeaderValues faKeTargetHeader = requestHeaders.get(X_FAKE_TARGET);
+        if (faKeTargetHeader != null && !faKeTargetHeader.isEmpty()) {
+            fakeTargetHandler().handleRequest(exchange);
+            return;
+        }
+        final HeaderValues hostHeader = requestHeaders.get(Headers.HOST_STRING);
+        if (hostHeader == null) {
+            ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
+            return;
+        }
+        String host = hostHeader.getFirst();
         final String prefixNodeName = "/" + Application.PREFIX;
         final String virtualhostNodePrefix = prefixNodeName + "/virtualhosts";
         final String virtualhostNodeName = virtualhostNodePrefix + "/" + host;
@@ -113,6 +127,14 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         }
 
         this.defaultHandler.handleRequest(exchange);
+    }
+
+    private HttpHandler fakeTargetHandler() {
+        return exchange -> {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/plain");
+            exchange.getResponseHeaders().put(Headers.SERVER, "PLANC");
+            exchange.getResponseSender().send("2");
+        };
     }
 
 }
