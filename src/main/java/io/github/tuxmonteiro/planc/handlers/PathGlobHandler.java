@@ -4,10 +4,9 @@
  */
 package io.github.tuxmonteiro.planc.handlers;
 
-import java.util.Collections;
-import java.util.Map;
 import java.util.Objects;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.undertow.server.HttpHandler;
@@ -18,7 +17,7 @@ import jodd.util.Wildcard;
 
 public class PathGlobHandler implements HttpHandler {
 
-    private final Map<PathOrdered, HttpHandler> paths = Collections.synchronizedMap(new TreeMap<PathOrdered, HttpHandler>());
+    private final ConcurrentMap<PathOrdered, HttpHandler> paths = new ConcurrentSkipListMap<>();
 
     private HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
 
@@ -49,10 +48,7 @@ public class PathGlobHandler implements HttpHandler {
         AtomicBoolean hit = new AtomicBoolean(false);
         paths.entrySet().forEach(entry -> {
             if (!hit.get()) {
-                String pathKey = entry.getKey().getPath();
-                if (pathKey.endsWith("/") && !pathKey.contains("*")) {
-                    pathKey = pathKey + "*";
-                }
+                final String pathKey = entry.getKey().getPath();
                 hit.set(Wildcard.match(path, pathKey));
                 if (hit.get()) {
                     try {
@@ -73,7 +69,7 @@ public class PathGlobHandler implements HttpHandler {
     }
 
     public synchronized boolean addPath(final String path, int order, final HttpHandler handler) {
-        return paths.put(new PathOrdered(path, order), handler) == null;
+        return paths.put(new PathOrdered(path.endsWith("/") && !path.contains("*")? path + "*" : path, order), handler) == null;
     }
 
     public synchronized boolean removePath(final String path) {
