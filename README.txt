@@ -18,8 +18,9 @@ PLANC
 # etcdctl set /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)/type PATH
 # etcdctl mkdir /PLANC/pools
 # etcdctl mkdir /PLANC/pools/0
+# etcdctl mkdir /PLANC/pools/0/targets
 # etcdctl set /PLANC/pools/0/loadbalance ROUNDROBIN
-# etcdctl set /PLANC/pools/0/0 http://127.0.0.1:8080
+# etcdctl set /PLANC/pools/0/targets/0 http://127.0.0.1:8080
 
 4. Resetting all
 

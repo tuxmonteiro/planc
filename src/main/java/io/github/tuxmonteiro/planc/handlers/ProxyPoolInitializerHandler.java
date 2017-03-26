@@ -24,6 +24,7 @@ import org.zalando.boot.etcd.EtcdClient;
 import org.zalando.boot.etcd.EtcdNode;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
@@ -105,15 +106,20 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                             "proxyClient: " + proxyClient.hashCode() + ", " +
                             "hostSelectorInicializer: " + hostSelectorInicializer.hashCode() + ")");
 
-                    List<EtcdNode> targets = Optional.ofNullable(poolOfRuleSelected.getNodes()).orElse(Collections.emptyList());
-                    targets.forEach(target -> {
-                        if (target.getKey().equals(poolNodeName + "/" + poolName + "/loadbalance")) {
-                            mapToTargetHostSelector(hostSelectorInicializer, HostSelectorAlgorithm.valueOf(target.getValue()).getHostSelector());
-                            logger.info("LoadBalance algorithm: " + target.getValue());
-                        } else {
-                            addHost(proxyClient, URI.create(target.getValue()));
-                            logger.info("added target " + target.getValue());
+                    final List<EtcdNode> poolAttributes = Optional.ofNullable(poolOfRuleSelected.getNodes()).orElse(Collections.emptyList());
+                    final List<EtcdNode> targets = new ArrayList<>();
+                    poolAttributes.forEach(attrib -> {
+                        if (attrib.getKey().equals(poolNodeName + "/" + poolName + "/loadbalance")) {
+                            mapToTargetHostSelector(hostSelectorInicializer, HostSelectorAlgorithm.valueOf(attrib.getValue()).getHostSelector());
+                            logger.info("LoadBalance algorithm: " + attrib.getValue());
                         }
+                        if (attrib.getKey().equals(poolNodeName + "/" + poolName + "/targets")) {
+                            targets.addAll(Optional.ofNullable(attrib.getNodes()).orElse(Collections.emptyList()));
+                        }
+                    });
+                    targets.forEach(target -> {
+                        addHost(proxyClient, URI.create(target.getValue()));
+                        logger.info("added target " + target.getValue());
                     });
                 } else {
                     logger.warn("pool " + poolName + " is empty [" + poolNodeName + "/" + poolName + "]");
