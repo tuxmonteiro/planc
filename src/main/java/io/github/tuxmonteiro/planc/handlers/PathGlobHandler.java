@@ -13,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;
+import io.undertow.util.Headers;
 import jodd.util.Wildcard;
 
 public class PathGlobHandler implements HttpHandler {
@@ -25,6 +26,14 @@ public class PathGlobHandler implements HttpHandler {
         this.defaultHandler = defaultHandler;
     }
 
+    private HttpHandler pathGlobHandlerCheck() {
+        return exchange -> {
+            exchange.getResponseHeaders().put(Headers.CONTENT_TYPE, "text/plain");
+            exchange.getResponseHeaders().put(Headers.SERVER, "PLANC");
+            exchange.getResponseSender().send("1");
+        };
+    }
+
     @Override
     public void handleRequest(HttpServerExchange exchange) throws Exception {
         if (paths.isEmpty()) {
@@ -32,6 +41,10 @@ public class PathGlobHandler implements HttpHandler {
             return;
         }
         final String path = exchange.getRelativePath();
+        if (path.equals("/__path_handler_check__")) {
+            pathGlobHandlerCheck().handleRequest(exchange);
+            return;
+        }
 
         AtomicBoolean hit = new AtomicBoolean(false);
         paths.entrySet().forEach(entry -> {
