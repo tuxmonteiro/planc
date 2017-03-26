@@ -14,8 +14,12 @@ import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.util.Headers;
 import jodd.util.Wildcard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PathGlobHandler implements HttpHandler {
+
+    private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final ConcurrentMap<PathOrdered, HttpHandler> paths = new ConcurrentSkipListMap<>();
 
@@ -52,9 +56,14 @@ public class PathGlobHandler implements HttpHandler {
                 hit.set(Wildcard.match(path, pathKey));
                 if (hit.get()) {
                     try {
-                        entry.getValue().handleRequest(exchange);
+                        final HttpHandler handler = entry.getValue();
+                        if (handler != null) {
+                            handler.handleRequest(exchange);
+                        } else {
+                            logger.error("Handler is null");
+                        }
                     } catch (Exception e) {
-                        // TODO: log.error(e)
+                        logger.error(e.getMessage());
                     }
                 }
             }
