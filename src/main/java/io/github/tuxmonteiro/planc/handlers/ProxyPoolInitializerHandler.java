@@ -38,7 +38,11 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
 
     private final HttpHandler parentHandler;
     private final HostSelector hostSelectorInicializer = new HostSelectorInitializer();
-    private final ProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), null, hostSelectorInicializer);
+    private final ProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), exchange -> {
+                                                // we always create a new connection for upgrade requests
+                                                return exchange.getRequestHeaders().contains(Headers.UPGRADE);
+                                            }, hostSelectorInicializer)
+                                            .setConnectionsPerThread(2000);
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
     private final String ruleKey;
     private final int order;
