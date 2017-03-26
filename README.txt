@@ -27,4 +27,4 @@ PLANC
 
 5. Resetting only one virtualhost
 
-# etcdctl set /PLANC/reset/teste teste
+# etcdctl set /PLANC/virtualhosts/teste/reset teste --ttl 5
