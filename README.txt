@@ -10,12 +10,12 @@ PLANC
 
 3. Defining routes in etcd service
 
-# etcdctl mkdir /PLANC/virtualhosts/teste
-# etcdctl mkdir /PLANC/virtualhosts/teste/rules
-# etcdctl mkdir /PLANC/virtualhosts/teste/rules/$(echo '/' | base64)
-# etcdctl set /PLANC/virtualhosts/teste/rules/$(echo '/' | base64)/order 0
-# etcdctl set /PLANC/virtualhosts/teste/rules/$(echo '/' | base64)/target 0
-# etcdctl set /PLANC/virtualhosts/teste/rules/$(echo '/' | base64)/type PATH
+# etcdctl mkdir /PLANC/virtualhosts/test.com
+# etcdctl mkdir /PLANC/virtualhosts/test.com/rules
+# etcdctl mkdir /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)
+# etcdctl set /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)/order 0
+# etcdctl set /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)/target 0
+# etcdctl set /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)/type PATH
 # etcdctl mkdir /PLANC/pools
 # etcdctl mkdir /PLANC/pools/0
 # etcdctl set /PLANC/pools/0/loadbalance ROUNDROBIN
@@ -27,4 +27,4 @@ PLANC
 
 5. Resetting only one virtualhost
 
-# etcdctl set /PLANC/virtualhosts/teste/reset teste --ttl 5
+# etcdctl set /PLANC/virtualhosts/test.com/reset test.com --ttl 5
