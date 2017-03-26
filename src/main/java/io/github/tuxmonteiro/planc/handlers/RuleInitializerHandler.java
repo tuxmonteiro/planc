@@ -7,14 +7,17 @@ package io.github.tuxmonteiro.planc.handlers;
 import io.github.tuxmonteiro.planc.Application;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
+import io.undertow.server.handlers.IPAddressAccessControlHandler;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.util.Headers;
+import io.undertow.util.StatusCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.zalando.boot.etcd.EtcdClient;
 import org.zalando.boot.etcd.EtcdNode;
 
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
 import java.util.HashSet;
@@ -58,7 +61,7 @@ public class RuleInitializerHandler implements HttpHandler {
             if (ruleNode.getKey() != null) {
                 final List<EtcdNode> rulesRegistered = Optional.ofNullable(ruleNode.getNodes()).orElse(Collections.emptyList());
                 if (!rulesRegistered.isEmpty()) {
-                    rulesRegistered.stream().filter(EtcdNode::isDir).forEach(keyComplete -> {
+                    rulesRegistered.stream().filter(EtcdNode::isDir).forEach((EtcdNode keyComplete) -> {
                         String ruleKey = keyComplete.getKey();
                         int ruleFromIndex = ruleKey.lastIndexOf("/");
                         String rule = ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
@@ -76,7 +79,15 @@ public class RuleInitializerHandler implements HttpHandler {
                             final ProxyPoolInitializerHandler proxyPoolInitializerHandler = new ProxyPoolInitializerHandler(pathGlobHandler, ruleKey, order);
                             proxyPoolInitializerHandler.setTemplate(template);
                             ((PathGlobHandler)pathGlobHandler).addPath(ruleDecoded, order, proxyPoolInitializerHandler);
-                            nameVirtualHostHandler.addHost(host, pathGlobHandler);
+                            final EtcdNode allow = hostNodes.stream().filter(node -> node.getKey().equals(virtualhostNodeName + "/allow")).findFirst().orElse(new EtcdNode());
+                            final HttpHandler ruleTargetHandler;
+                            if (allow.getKey() != null) {
+                                ruleTargetHandler = new IPAddressAccessControlHandler(pathGlobHandler, StatusCodes.FORBIDDEN);
+                                Arrays.stream(allow.getValue().split(",")).forEach(((IPAddressAccessControlHandler)ruleTargetHandler)::addAllow);
+                            } else {
+                                ruleTargetHandler = pathGlobHandler;
+                            }
+                            nameVirtualHostHandler.addHost(host, ruleTargetHandler);
 
                             rules.add(ruleDecoded);
 
