@@ -6,12 +6,14 @@ package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.client.ExtendedLoadBalancingProxyClient;
+import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorAlgorithm;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorInitializer;
 import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;
+import io.undertow.server.handlers.proxy.ProxyClient;
 import io.undertow.server.handlers.proxy.ProxyHandler;
 import io.undertow.util.HeaderMap;
 import io.undertow.util.HeaderValues;
@@ -35,8 +37,8 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final HttpHandler parentHandler;
-    private final HostSelectorInitializer hostSelectorInicializer = new HostSelectorInitializer();
-    private final ExtendedLoadBalancingProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), null, hostSelectorInicializer);
+    private final HostSelector hostSelectorInicializer = new HostSelectorInitializer();
+    private final ProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), null, hostSelectorInicializer);
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
     private final String ruleKey;
     private final int order;
@@ -75,7 +77,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         final EtcdNode nodeEmpty = new EtcdNode();
         nodeEmpty.setValue("");
 
-        if (proxyClient.isHostsEmpty()) {
+        if (isHostsEmpty(proxyClient)) {
 
             final List<EtcdNode> rulesRegistered = Optional.ofNullable(template.get(rulesNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
 
@@ -102,10 +104,10 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                     List<EtcdNode> targets = Optional.ofNullable(poolOfRuleSelected.getNodes()).orElse(Collections.emptyList());
                     targets.forEach(target -> {
                         if (target.getKey().equals(poolNodeName + "/" + poolName + "/loadbalance")) {
-                            hostSelectorInicializer.setHostSelector(HostSelectorAlgorithm.valueOf(target.getValue()).getHostSelector());
+                            mapToTargetHostSelector(hostSelectorInicializer, HostSelectorAlgorithm.valueOf(target.getValue()).getHostSelector());
                             logger.info("LoadBalance algorithm: " + target.getValue());
                         } else {
-                            proxyClient.addHost(URI.create(target.getValue()));
+                            addHost(proxyClient, URI.create(target.getValue()));
                             logger.info("added target " + target.getValue());
                         }
                     });
@@ -119,7 +121,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                     ((PathGlobHandler) parentHandler).addPath(ruleDecoded, order, proxyHandler);
                 }
                 proxyHandler.handleRequest(exchange);
-                if (proxyClient.isHostsEmpty()) {
+                if (isHostsEmpty(proxyClient)) {
                     logger.error("hosts is empty");
                 }
                 return;
@@ -135,6 +137,18 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
             exchange.getResponseHeaders().put(Headers.SERVER, "PLANC");
             exchange.getResponseSender().send("2");
         };
+    }
+
+    private void mapToTargetHostSelector(final HostSelector hostSelector, final HostSelector targetHostSelector) {
+        ((HostSelectorInitializer)hostSelector).setHostSelector(targetHostSelector);
+    }
+
+    private void addHost(final ProxyClient proxyClient, final URI uri) {
+        ((ExtendedLoadBalancingProxyClient)proxyClient).addHost(uri);
+    }
+
+    private boolean isHostsEmpty(final ProxyClient proxyClient) {
+        return ((ExtendedLoadBalancingProxyClient)proxyClient).isHostsEmpty();
     }
 
 }
