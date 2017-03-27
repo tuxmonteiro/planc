@@ -8,7 +8,6 @@ import io.github.tuxmonteiro.planc.Application;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
@@ -24,7 +23,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
 @Service
-@EnableScheduling
 public class AutoResetter {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
