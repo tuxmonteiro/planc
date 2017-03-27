@@ -2,16 +2,19 @@
 <Configuration status="WARN">
   <Properties>
     <Property name="LOGLEVEL">INFO</Property>
-    <Property name="hostname">${env:HOSTNAME}</Property>
   </Properties>
   <Appenders>
-    <Socket name="Syslog" host="127.0.0.1" port="514" protocol="UDP">
-      <PatternLayout pattern="&lt;14&gt;%d{MMM dd HH:mm:ss} ${hostname} router: [%p] %t %m\ttags: planc,app%n"/>
-    </Socket>
+    <Console name="STDOUT" target="SYSTEM_OUT">
+      <PatternLayout>
+          <Pattern>%highlight{%d %p %c{1.} [%t] %m %ex%n}{FATAL=red blink, ERROR=red, WARN=yellow bold, INFO=blue, DEBUG=green bold, TRACE=gray}</Pattern>
+      </PatternLayout>
+    </Console>
   </Appenders>
   <Loggers>
+    <Logger name="org.springframework.data.rest.webmvc.AbstractRepositoryRestController" level="OFF" additivity="false"/>
+    <Logger name="io.github.tuxmonteiro.planc.handlers.ExtendedProxyHandler" level="OFF" additivity="false"/>
     <Root level="trace">
-      <AppenderRef ref="Syslog" level="${env:LOGLEVEL}"/>
+      <AppenderRef ref="STDOUT" level="${env:LOGLEVEL}"/>
     </Root>
   </Loggers>
 </Configuration>
