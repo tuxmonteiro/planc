@@ -66,11 +66,6 @@
             <version>1.7.19</version>
         </dependency>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-            <version>1.7.19</version>
-        </dependency>
-        <dependency>
             <groupId>io.undertow</groupId>
             <artifactId>undertow-core</artifactId>
             <version>1.4.11.Final</version>
@@ -90,8 +85,11 @@
             <artifactId>guava</artifactId>
             <version>21.0</version>
         </dependency>
-
-
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+            <version>3.3.6</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -102,7 +100,9 @@
                 <configuration>
                     <jvmArguments>
                         -server
-                        -Xmx64m -Xss256k
+                        -Xmx128m -Xss256k
+                        -Dlog4j.configurationFile=src/main/resources/log4j2-spring.xml
+                        -DLog4jContextSelector=org.apache.logging.log4j.core.async.AsyncLoggerContextSelector
                     </jvmArguments>
                 </configuration>
             </plugin>

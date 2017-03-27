@@ -6,6 +6,7 @@ package io.github.tuxmonteiro.planc.services;
 
 import io.github.tuxmonteiro.planc.handlers.VirtualHostInitializerHandler;
 import io.undertow.Undertow;
+import io.undertow.UndertowOptions;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.NameVirtualHostHandler;
@@ -49,6 +50,7 @@ public class Router {
                 .setSocketOption(Options.KEEP_ALIVE, true)
                 .setSocketOption(Options.REUSE_ADDRESSES, true)
                 .setSocketOption(Options.TCP_NODELAY, true)
+                .setServerOption(UndertowOptions.RECORD_REQUEST_START_TIME, true)
                 .build();
         undertow.start();
     }

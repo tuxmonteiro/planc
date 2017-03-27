@@ -227,6 +227,8 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
             callback.couldNotResolveBackend(exchange);
         } else {
             exchange.addToAttachmentList(ATTEMPTED_HOSTS, host);
+            final URI uri = host.getUri();
+            exchange.putAttachment(HostSelector.REAL_DEST, uri != null ? uri.toString() : "UNDEF");
             if (holder != null || (exclusivityChecker != null && exclusivityChecker.isExclusivityRequired(exchange))) {
                 // If we have a holder, even if the connection was closed we now exclusivity was already requested so our client
                 // may be assuming it still exists.
@@ -257,17 +259,20 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
 
                     @Override
                     public void queuedRequestFailed(HttpServerExchange exchange) {
+                        exchange.removeAttachment(HostSelector.REAL_DEST);
                         callback.queuedRequestFailed(exchange);
                     }
 
                     @Override
                     public void failed(HttpServerExchange exchange) {
+                        exchange.removeAttachment(HostSelector.REAL_DEST);
                         UndertowLogger.PROXY_REQUEST_LOGGER.proxyFailedToConnectToBackend(exchange.getRequestURI(), host.uri);
                         callback.failed(exchange);
                     }
 
                     @Override
                     public void couldNotResolveBackend(HttpServerExchange exchange) {
+                        exchange.removeAttachment(HostSelector.REAL_DEST);
                         callback.couldNotResolveBackend(exchange);
                     }
                 }, timeout, timeUnit, true);

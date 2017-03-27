@@ -32,7 +32,8 @@ import java.util.Optional;
 
 public class ProxyPoolInitializerHandler implements HttpHandler {
 
-    public static final String X_FAKE_TARGET = "X-Fake-Target";
+    private static final String X_FAKE_TARGET = "X-Fake-Target";
+
     private EtcdClient template;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
@@ -47,7 +48,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
     private final String ruleKey;
     private final int order;
-    private ProxyHandler proxyHandler = new ProxyHandler(proxyClient, defaultHandler);
+    private ExtendedProxyHandler proxyHandler = new ExtendedProxyHandler(proxyClient, defaultHandler);
 
     ProxyPoolInitializerHandler(final HttpHandler parentHandler, final String ruleKey, final int order) {
         this.parentHandler = parentHandler;
