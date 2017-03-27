@@ -28,6 +28,7 @@ public class Router {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final NameVirtualHostHandler nameVirtualHostHandler = new NameVirtualHostHandler();
     private final VirtualHostInitializerHandler virtualHostInitializerHandler = new VirtualHostInitializerHandler(nameVirtualHostHandler);
+    private Undertow undertow = null;
 
     @Autowired
     public Router(EtcdClient template) {
@@ -41,7 +42,7 @@ public class Router {
         nameVirtualHostHandler.addHost("__ping__", pingHandler());
 
         nameVirtualHostHandler.setDefaultHandler(virtualHostInitializerHandler.setTemplate(template));
-        Undertow undertow = Undertow.builder().addHttpListener(8000, "0.0.0.0", nameVirtualHostHandler)
+        undertow = Undertow.builder().addHttpListener(8000, "0.0.0.0", nameVirtualHostHandler)
                 .setIoThreads(4)
                 .setWorkerThreads(4 * 8)
                 .setBufferSize(16384)
@@ -51,8 +52,12 @@ public class Router {
                 .setSocketOption(Options.REUSE_ADDRESSES, true)
                 .setSocketOption(Options.TCP_NODELAY, true)
                 .setServerOption(UndertowOptions.RECORD_REQUEST_START_TIME, true)
+                .setServerOption(UndertowOptions.ENABLE_STATISTICS, true)
                 .build();
-        undertow.start();
+    }
+
+    public Undertow getUndertow() {
+        return undertow;
     }
 
     private HttpHandler pingHandler() {
