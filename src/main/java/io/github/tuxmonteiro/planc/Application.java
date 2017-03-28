@@ -14,7 +14,7 @@ public class Application {
 
     public final static String PREFIX = System.getProperty("APP_PREFIX", "PLANC");
 
-    public static void main(String args[]) throws Exception {
+    public static void main(String args[]) {
         SpringApplication.run(Application.class, args);
     }
 }

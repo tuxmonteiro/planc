@@ -18,7 +18,7 @@ public class HashAlgorithm {
     /**
      * The Enum HashType.
      */
-    public static enum HashType {
+    public enum HashType {
 
         /** It's not so bad, but is a little slow. */
         MD5,

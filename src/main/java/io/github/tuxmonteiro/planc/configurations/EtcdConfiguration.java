@@ -11,7 +11,7 @@ import org.zalando.boot.etcd.EtcdClient;
 @Configuration
 public class EtcdConfiguration {
 
-    @Bean
+    @Bean("etcdClient")
     public EtcdClient etcdClient() {
         return new EtcdClient("http://127.0.0.1:2379");
     }

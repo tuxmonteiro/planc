@@ -17,7 +17,7 @@ public class ConsistentHash<T> {
     private int                         numberOfReplicas;
 
     /** The circle. */
-    private final SortedMap<Integer, T> circle  = new TreeMap<Integer, T>();
+    private final SortedMap<Integer, T> circle  = new TreeMap<>();
 
     /**
      * Instantiates a new consistent hash.

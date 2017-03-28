@@ -8,12 +8,12 @@ import io.github.tuxmonteiro.planc.handlers.VirtualHostInitializerHandler;
 import io.undertow.Undertow;
 import io.undertow.UndertowOptions;
 import io.undertow.server.HttpHandler;
-import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.xnio.Options;
 import org.zalando.boot.etcd.EtcdClient;
@@ -31,7 +31,7 @@ public class Router {
     private Undertow undertow = null;
 
     @Autowired
-    public Router(EtcdClient template) {
+    public Router(@Value("#{etcdClient}") final EtcdClient template) {
         this.template = template;
     }
 

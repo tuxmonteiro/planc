@@ -14,7 +14,6 @@ import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.ResponseCodeHandler;
 import io.undertow.server.handlers.proxy.ProxyClient;
-import io.undertow.server.handlers.proxy.ProxyHandler;
 import io.undertow.util.HeaderMap;
 import io.undertow.util.HeaderValues;
 import io.undertow.util.Headers;
@@ -24,6 +23,7 @@ import org.zalando.boot.etcd.EtcdClient;
 import org.zalando.boot.etcd.EtcdNode;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collections;
@@ -48,7 +48,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
     private final String ruleKey;
     private final int order;
-    private ExtendedProxyHandler proxyHandler = new ExtendedProxyHandler(proxyClient, defaultHandler);
+    private final ExtendedProxyHandler proxyHandler = new ExtendedProxyHandler(proxyClient, defaultHandler);
 
     ProxyPoolInitializerHandler(final HttpHandler parentHandler, final String ruleKey, final int order) {
         this.parentHandler = parentHandler;
@@ -127,7 +127,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                 }
                 int ruleFromIndex = ruleKey.lastIndexOf("/");
                 String rule = ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
-                String ruleDecoded = new String(Base64.getDecoder().decode(rule));
+                String ruleDecoded = new String(Base64.getDecoder().decode(rule), StandardCharsets.UTF_8);
                 if (parentHandler instanceof PathGlobHandler) {
                     ((PathGlobHandler) parentHandler).addPath(ruleDecoded, order, proxyHandler);
                 }

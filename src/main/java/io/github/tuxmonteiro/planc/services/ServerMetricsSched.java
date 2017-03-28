@@ -20,7 +20,7 @@ public class ServerMetricsSched {
 
     @Scheduled(fixedRate = 5000)
     private void showMetrics() {
-        undertow.getListenerInfo().forEach(listenerInfo -> {
+        undertow.getListenerInfo().forEach(listenerInfo ->
             logger.info("{\"undertow_listener_info\": {" +
                     "\"protocol\": " + listenerInfo.getProtcol() + ", " +
                     "\"active_connections\": " + listenerInfo.getConnectorStatistics().getActiveConnections() + ", " +
@@ -28,7 +28,7 @@ public class ServerMetricsSched {
                     "\"bytes_received\": " + listenerInfo.getConnectorStatistics().getBytesReceived() + ", " +
                     "\"bytes_sent\": " + listenerInfo.getConnectorStatistics().getBytesSent() + ", " +
                     "\"error_count\": " + listenerInfo.getConnectorStatistics().getErrorCount() + ", " +
-                    "\"request_count\": " + listenerInfo.getConnectorStatistics().getRequestCount() + "} }");
-        });
+                    "\"request_count\": " + listenerInfo.getConnectorStatistics().getRequestCount() + "} }")
+        );
     }
 }

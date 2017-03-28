@@ -22,6 +22,7 @@ import java.util.regex.Pattern;
 
 public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCode {
 
+    private static final int MAX_REQUEST_TIME = Integer.MAX_VALUE - 1;
     private static final String UNKNOWN = "UNKNOWN";
     private static final String REAL_DEST = "#REAL_DEST#";
     private static final String LOGPATTERN = "%a\t%v\t%r\t-\t-\tLocal:\t%s\t*-\t%B\t%D\tProxy:\t"+ REAL_DEST +"\t%s\t-\t%b\t-\t-" +
@@ -32,7 +33,6 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
     private final ExchangeAttribute tokens = ExchangeAttributes.parser(getClass().getClassLoader(), new SubstituteEmptyWrapper("-")).parse(LOGPATTERN);
     private final AccessLogCompletionListener accessLogCompletionListener = new AccessLogCompletionListener();
     private final ResponseTimeAttribute responseTimeAttribute = new ResponseTimeAttribute(TimeUnit.MILLISECONDS);
-    private int maxRequestTime = Integer.MAX_VALUE - 1;
     private final ProxyHandler proxyHandler;
 
     public ExtendedProxyHandler(ProxyClient proxyClient, int maxRequestTime, HttpHandler next) {
@@ -61,7 +61,7 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
                 int realStatus = exchange.getStatusCode();
                 long responseBytesSent = exchange.getResponseBytesSent();
                 final Integer responseTime = Math.round(Float.parseFloat(responseTimeAttribute.readAttribute(exchange)));
-                int fakeStatusCode = getFakeStatusCode(tempRealDest, realStatus, responseBytesSent, responseTime, maxRequestTime);
+                int fakeStatusCode = getFakeStatusCode(tempRealDest, realStatus, responseBytesSent, responseTime, MAX_REQUEST_TIME);
                 if (fakeStatusCode != NOT_MODIFIED) {
                     message = message.replaceAll("^(.*Local:\t)\\d{3}(\t.*Proxy:\t.*\t)\\d{3}(\t.*)$",
                             "$1" + String.valueOf(fakeStatusCode) + "$2" + String.valueOf(fakeStatusCode) + "$3");
@@ -69,9 +69,7 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
                 Pattern compile = Pattern.compile("([^\\t]*\\t[^\\t]*\\t)([^\\t]+)(\\t.*)$");
                 Matcher match = compile.matcher(message);
                 if (match.find()) {
-                    StringBuilder sb = new StringBuilder();
-                    sb.append(match.group(1)).append(match.group(2).replace(" ", "\t")).append(match.group(3));
-                    message = sb.toString();
+                    message = match.group(1) + match.group(2).replace(" ", "\t") + match.group(3);
                 }
                 logger.info(message.replaceAll(REAL_DEST, realDest));
             } catch (Exception e) {

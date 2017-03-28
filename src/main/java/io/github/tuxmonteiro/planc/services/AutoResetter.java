@@ -8,6 +8,7 @@ import io.github.tuxmonteiro.planc.Application;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
@@ -32,7 +33,7 @@ public class AutoResetter {
     private final String applicationPrefix = "/" + Application.PREFIX;
 
     @Autowired
-    public AutoResetter(final Router router, final EtcdClient template) {
+    public AutoResetter(final Router router, @Value("#{etcdClient}") final EtcdClient template) {
         this.router = router;
         this.template = template;
     }
@@ -62,7 +63,10 @@ public class AutoResetter {
     }
 
     private void resetByVirtualhost() {
-        EtcdNode virtualhostNode;
+        final EtcdNode virtualhostNode;
+        final EtcdNode undefNode = new EtcdNode();
+        undefNode.setValue("UNDEF");
+
         try {
             virtualhostNode = template.get(applicationPrefix + "/virtualhosts", true).getNode();
         } catch (EtcdException e) {
@@ -73,7 +77,7 @@ public class AutoResetter {
 
         virtualhostNodes.forEach(node -> {
             if (hasReset(node)) {
-                String virtualhost = getResetNodeStream(node).findAny().get().getValue();
+                String virtualhost = getResetNodeStream(node).findAny().orElse(undefNode).getValue();
                 if (node.getKey().endsWith("/" + virtualhost)) {
                     router.reset(virtualhost);
                 } else {

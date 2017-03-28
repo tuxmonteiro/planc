@@ -50,13 +50,12 @@ public class PathGlobHandler implements HttpHandler {
         }
 
         AtomicBoolean hit = new AtomicBoolean(false);
-        paths.entrySet().forEach(entry -> {
+        paths.forEach((key, handler) -> {
             if (!hit.get()) {
-                final String pathKey = entry.getKey().getPath();
+                final String pathKey = key.getPath();
                 hit.set(Wildcard.match(path, pathKey));
                 if (hit.get()) {
                     try {
-                        final HttpHandler handler = entry.getValue();
                         if (handler != null) {
                             handler.handleRequest(exchange);
                         } else {

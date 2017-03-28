@@ -17,10 +17,10 @@ import static io.github.tuxmonteiro.planc.consistenthash.HashAlgorithm.HashType.
 public class HashSourceIpHostSelector implements HostSelector {
 
     private static final boolean IGNORE_XFORWARDED_FOR = Boolean.valueOf(System.getProperty("IGNORE_XFORWARDED_FOR", "false"));
+    private static final int NUM_REPLICAS = 1;
 
-    private HashAlgorithm hashAlgorithm = new HashAlgorithm(SIP24);
-    private int numReplicas = 1;
-    private final ConsistentHash<Integer> consistentHash = new ConsistentHash<>(hashAlgorithm, numReplicas, Collections.emptyList());
+    private final HashAlgorithm hashAlgorithm = new HashAlgorithm(SIP24);
+    private final ConsistentHash<Integer> consistentHash = new ConsistentHash<>(hashAlgorithm, NUM_REPLICAS, Collections.emptyList());
     private final AtomicBoolean initialized = new AtomicBoolean(false);
 
     @Override
@@ -30,7 +30,7 @@ public class HashSourceIpHostSelector implements HostSelector {
                                                     .sorted(Comparator.comparing(e -> e.getValue().getOpenConnection()))
                                                     .map(Map.Entry::getKey)
                                                     .collect(Collectors.toCollection(LinkedHashSet::new));
-            consistentHash.rebuild(hashAlgorithm, numReplicas, listPos);
+            consistentHash.rebuild(hashAlgorithm, NUM_REPLICAS, listPos);
         }
         return consistentHash.get(getKey(exchange));
     }

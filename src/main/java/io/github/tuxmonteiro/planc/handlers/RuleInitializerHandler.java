@@ -24,7 +24,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class RuleInitializerHandler implements HttpHandler {
 
@@ -69,7 +68,7 @@ public class RuleInitializerHandler implements HttpHandler {
                         final EtcdNode nodeWithUndef = new EtcdNode();
                         nodeWithZero.setValue("0");
                         nodeWithUndef.setValue(RuleType.UNDEF.toString());
-                        final Set<EtcdNode> nodes = Optional.ofNullable(keyComplete.getNodes()).orElse(Collections.emptyList()).stream().collect(Collectors.toSet());
+                        final Set<EtcdNode> nodes = new HashSet<>(Optional.ofNullable(keyComplete.getNodes()).orElse(Collections.emptyList()));
                         int order = Integer.valueOf(nodes.stream().filter(n -> n.getKey().equals(ruleKey + "/order")).findAny().orElse(nodeWithZero).getValue());
                         String type = nodes.stream().filter(n -> n.getKey().equals(ruleKey + "/type")).findAny().orElse(nodeWithUndef).getValue();
                         String ruleDecoded = new String(Base64.getDecoder().decode(rule)).trim();

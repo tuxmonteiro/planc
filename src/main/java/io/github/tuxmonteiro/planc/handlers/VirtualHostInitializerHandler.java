@@ -32,7 +32,7 @@ public class VirtualHostInitializerHandler implements HttpHandler {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
     }
 
-    public VirtualHostInitializerHandler setTemplate(final EtcdClient template) {
+    public synchronized VirtualHostInitializerHandler setTemplate(final EtcdClient template) {
         this.template = template;
         return this;
     }
