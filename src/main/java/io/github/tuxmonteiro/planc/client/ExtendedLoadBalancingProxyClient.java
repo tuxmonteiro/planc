@@ -23,6 +23,7 @@ import io.undertow.server.handlers.proxy.ProxyConnectionPool;
 import io.undertow.util.AttachmentKey;
 import io.undertow.util.AttachmentList;
 import io.undertow.util.CopyOnWriteMap;
+import io.undertow.util.HttpString;
 import org.xnio.OptionMap;
 import org.xnio.ssl.XnioSsl;
 
@@ -224,6 +225,7 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
 
         final Host host = selectHost(exchange);
         if (host == null) {
+            exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "couldNotResolveBackend");
             callback.couldNotResolveBackend(exchange);
         } else {
             exchange.addToAttachmentList(ATTEMPTED_HOSTS, host);
@@ -260,12 +262,13 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
                     @Override
                     public void queuedRequestFailed(HttpServerExchange exchange) {
                         exchange.removeAttachment(HostSelector.REAL_DEST);
+                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "queuedRequestFailed");
                         callback.queuedRequestFailed(exchange);
                     }
 
                     @Override
                     public void failed(HttpServerExchange exchange) {
-                        exchange.removeAttachment(HostSelector.REAL_DEST);
+                        if (tryNextHostIfFailed(target, exchange, callback, timeout, timeUnit)) return;
                         UndertowLogger.PROXY_REQUEST_LOGGER.proxyFailedToConnectToBackend(exchange.getRequestURI(), host.uri);
                         callback.failed(exchange);
                     }
@@ -273,13 +276,53 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
                     @Override
                     public void couldNotResolveBackend(HttpServerExchange exchange) {
                         exchange.removeAttachment(HostSelector.REAL_DEST);
+                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "couldNotResolveBackend");
                         callback.couldNotResolveBackend(exchange);
                     }
                 }, timeout, timeUnit, true);
             } else {
-                host.connectionPool.connect(target, exchange, callback, timeout, timeUnit, false);
+                host.connectionPool.connect(target, exchange, new ProxyCallback<ProxyConnection>() {
+
+                    @Override
+                    public void completed(HttpServerExchange exchange, ProxyConnection result) {
+                        callback.completed(exchange, result);
+                    }
+
+                    @Override
+                    public void failed(HttpServerExchange exchange) {
+                        if (tryNextHostIfFailed(target, exchange, callback, timeout, timeUnit)) return;
+                        callback.failed(exchange);
+                    }
+
+                    @Override
+                    public void couldNotResolveBackend(HttpServerExchange exchange) {
+                        exchange.removeAttachment(HostSelector.REAL_DEST);
+                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "couldNotResolveBackend");
+                        callback.couldNotResolveBackend(exchange);
+                    }
+
+                    @Override
+                    public void queuedRequestFailed(HttpServerExchange exchange) {
+                        exchange.removeAttachment(HostSelector.REAL_DEST);
+                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "queuedRequestFailed");
+                        callback.queuedRequestFailed(exchange);
+                    }
+                }, timeout, timeUnit, false);
             }
         }
+    }
+
+    private boolean tryNextHostIfFailed(final ProxyTarget target, final HttpServerExchange exchange, final ProxyCallback<ProxyConnection> callback, long timeout, TimeUnit timeUnit) {
+        String uri = exchange.getAttachment(HostSelector.REAL_DEST);
+        if (uri != null) {
+            removeHost(URI.create(uri));
+            exchange.removeAttachment(HostSelector.REAL_DEST);
+            if (hosts.length > 0) {
+                getConnection(target, exchange, callback, timeout, timeUnit);
+                return true;
+            }
+        }
+        return false;
     }
 
     protected Host selectHost(HttpServerExchange exchange) {
