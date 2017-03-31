@@ -234,80 +234,13 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
             if (holder != null || (exclusivityChecker != null && exclusivityChecker.isExclusivityRequired(exchange))) {
                 // If we have a holder, even if the connection was closed we now exclusivity was already requested so our client
                 // may be assuming it still exists.
-                host.connectionPool.connect(target, exchange, new ProxyCallback<ProxyConnection>() {
-
-                    @Override
-                    public void completed(HttpServerExchange exchange, ProxyConnection result) {
-                        if (holder != null) {
-                            holder.connection = result;
-                        } else {
-                            final ExclusiveConnectionHolder newHolder = new ExclusiveConnectionHolder();
-                            newHolder.connection = result;
-                            ServerConnection connection = exchange.getConnection();
-                            connection.putAttachment(exclusiveConnectionKey, newHolder);
-                            connection.addCloseListener(new ServerConnection.CloseListener() {
-
-                                @Override
-                                public void closed(ServerConnection connection) {
-                                    ClientConnection clientConnection = newHolder.connection.getConnection();
-                                    if (clientConnection.isOpen()) {
-                                        safeClose(clientConnection);
-                                    }
-                                }
-                            });
-                        }
-                        callback.completed(exchange, result);
-                    }
-
-                    @Override
-                    public void queuedRequestFailed(HttpServerExchange exchange) {
-                        exchange.removeAttachment(HostSelector.REAL_DEST);
-                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "queuedRequestFailed");
-                        callback.queuedRequestFailed(exchange);
-                    }
-
-                    @Override
-                    public void failed(HttpServerExchange exchange) {
-                        if (tryNextHostIfFailed(target, exchange, callback, timeout, timeUnit)) return;
-                        UndertowLogger.PROXY_REQUEST_LOGGER.proxyFailedToConnectToBackend(exchange.getRequestURI(), host.uri);
-                        callback.failed(exchange);
-                    }
-
-                    @Override
-                    public void couldNotResolveBackend(HttpServerExchange exchange) {
-                        exchange.removeAttachment(HostSelector.REAL_DEST);
-                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "couldNotResolveBackend");
-                        callback.couldNotResolveBackend(exchange);
-                    }
-                }, timeout, timeUnit, true);
+                host.connectionPool.connect(target, exchange, new ProxyConnectionProxyCallback()
+                        .setHolder(holder).setCallback(callback).setTarget(target).setTimeout(timeout).setTimeUnit(timeUnit).setHost(host).setExclusive(true),
+                        timeout, timeUnit, true);
             } else {
-                host.connectionPool.connect(target, exchange, new ProxyCallback<ProxyConnection>() {
-
-                    @Override
-                    public void completed(HttpServerExchange exchange, ProxyConnection result) {
-                        callback.completed(exchange, result);
-                    }
-
-                    @Override
-                    public void failed(HttpServerExchange exchange) {
-                        if (tryNextHostIfFailed(target, exchange, callback, timeout, timeUnit)) return;
-                        callback.failed(exchange);
-                    }
-
-                    @Override
-                    public void couldNotResolveBackend(HttpServerExchange exchange) {
-                        exchange.removeAttachment(HostSelector.REAL_DEST);
-                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "couldNotResolveBackend");
-                        callback.couldNotResolveBackend(exchange);
-                    }
-
-                    @Override
-                    public void queuedRequestFailed(HttpServerExchange exchange) {
-                        exchange.removeAttachment(HostSelector.REAL_DEST);
-                        exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "queuedRequestFailed");
-                        callback.queuedRequestFailed(exchange);
-                    }
-                }, timeout, timeUnit, false);
+                host.connectionPool.connect(target, exchange, new ProxyConnectionProxyCallback()
+                        .setCallback(callback).setTarget(target).setTimeout(timeout).setTimeUnit(timeUnit).setHost(host), timeout,
+                        timeUnit, false);
             }
         }
     }
@@ -453,4 +386,92 @@ public class ExtendedLoadBalancingProxyClient implements ProxyClient {
 
     }
 
+    private class ProxyConnectionProxyCallback implements ProxyCallback<ProxyConnection> {
+
+        private ExclusiveConnectionHolder holder = null;
+        private ProxyCallback<ProxyConnection> callback;
+        private ProxyTarget target;
+        private long timeout;
+        private TimeUnit timeUnit;
+        private Host host;
+        private boolean exclusive = false;
+
+        @Override
+        public void completed(HttpServerExchange exchange, ProxyConnection result) {
+            if (exclusive) {
+                if (holder != null) {
+                    holder.connection = result;
+                } else {
+                    final ExclusiveConnectionHolder newHolder = new ExclusiveConnectionHolder();
+                    newHolder.connection = result;
+                    ServerConnection connection = exchange.getConnection();
+                    connection.putAttachment(exclusiveConnectionKey, newHolder);
+                    connection.addCloseListener(closeListener -> {
+                        ClientConnection clientConnection = newHolder.connection.getConnection();
+                        if (clientConnection.isOpen()) {
+                            safeClose(clientConnection);
+                        }
+                    });
+                }
+            }
+            callback.completed(exchange, result);
+        }
+
+        @Override
+        public void queuedRequestFailed(HttpServerExchange exchange) {
+            exchange.removeAttachment(HostSelector.REAL_DEST);
+            exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "queuedRequestFailed");
+            callback.queuedRequestFailed(exchange);
+        }
+
+        @Override
+        public void failed(HttpServerExchange exchange) {
+            if (tryNextHostIfFailed(target, exchange, callback, timeout, timeUnit)) return;
+            UndertowLogger.PROXY_REQUEST_LOGGER.proxyFailedToConnectToBackend(exchange.getRequestURI(), host.uri);
+            callback.failed(exchange);
+        }
+
+        @Override
+        public void couldNotResolveBackend(HttpServerExchange exchange) {
+            exchange.removeAttachment(HostSelector.REAL_DEST);
+            exchange.getResponseHeaders().add(HttpString.tryFromString("X-Error-Message"), "couldNotResolveBackend");
+            callback.couldNotResolveBackend(exchange);
+        }
+        
+        public ProxyConnectionProxyCallback setHolder(final ExclusiveConnectionHolder holder) {
+            this.holder = holder;
+            return this;
+        }
+
+        public ProxyConnectionProxyCallback setCallback(final ProxyCallback<ProxyConnection> callback) {
+            this.callback = callback;
+            return this;
+        }
+
+        public ProxyConnectionProxyCallback setTarget(final ProxyTarget target) {
+            this.target = target;
+            return this;
+        }
+
+        public ProxyConnectionProxyCallback setTimeout(final long timeout) {
+            this.timeout = timeout;
+            return this;
+        }
+
+        public ProxyConnectionProxyCallback setTimeUnit(final TimeUnit timeUnit) {
+            this.timeUnit = timeUnit;
+            return this;
+        }
+
+        public ProxyConnectionProxyCallback setHost(final Host host) {
+            this.host = host;
+            return this;
+        }
+
+        public ProxyConnectionProxyCallback setExclusive(final boolean exclusive) {
+            this.exclusive = exclusive;
+            return this;
+        }
+
+    }
 }
