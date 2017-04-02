@@ -4,16 +4,11 @@
 
 package io.github.tuxmonteiro.planc.services;
 
-import io.github.tuxmonteiro.planc.Application;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.ResourceAccessException;
-import org.zalando.boot.etcd.EtcdClient;
-import org.zalando.boot.etcd.EtcdException;
 import org.zalando.boot.etcd.EtcdNode;
 
 import javax.annotation.PostConstruct;
@@ -23,19 +18,20 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 
+import static io.github.tuxmonteiro.planc.services.ExternalData.*;
+
 @Service
 public class AutoResetter {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final Router router;
-    private final EtcdClient template;
-    private final String applicationPrefix = "/" + Application.PREFIX;
+    private final ExternalData data;
 
     @Autowired
-    public AutoResetter(final Router router, @Value("#{etcdClient}") final EtcdClient template) {
+    public AutoResetter(final Router router, final ExternalData externalData) {
         this.router = router;
-        this.template = template;
+        this.data = externalData;
     }
 
     @PostConstruct
@@ -45,16 +41,9 @@ public class AutoResetter {
 
     @Scheduled(fixedRate = 5000)
     public void periodicReset() {
-        boolean existPrefixRoot;
-        try {
-            existPrefixRoot = Optional.ofNullable(template.get("/").getNode().getNodes()).orElse(Collections.emptyList())
-                    .stream().filter(node -> node.getKey().equals(applicationPrefix)).count() != 0;
-        } catch (EtcdException|ResourceAccessException e) {
-            logger.error(e.getMessage());
-            return;
-        }
+        boolean existPrefixRoot = data.listFrom(ROOT_KEY).stream().filter(node -> node.getKey().equals(PREFIX_KEY)).count() != 0;
         if (!existPrefixRoot) {
-            logger.error(applicationPrefix + " not exist");
+            logger.error(PREFIX_KEY + " not exist");
             return;
         }
         if (resetAll()) return;
@@ -63,22 +52,13 @@ public class AutoResetter {
     }
 
     private void resetByVirtualhost() {
-        final EtcdNode virtualhostNode;
-        final EtcdNode undefNode = new EtcdNode();
-        undefNode.setValue("UNDEF");
-
-        try {
-            virtualhostNode = template.get(applicationPrefix + "/virtualhosts", true).getNode();
-        } catch (EtcdException e) {
-            logger.error(e.getMessage());
-            return;
-        }
+        final EtcdNode virtualhostNode = data.node(VIRTUALHOSTS_KEY, true);
         final List<EtcdNode> virtualhostNodes = Optional.ofNullable(virtualhostNode.getNodes()).orElse(Collections.emptyList());
 
         virtualhostNodes.forEach(node -> {
             if (hasReset(node)) {
-                String virtualhost = getResetNodeStream(node).findAny().orElse(undefNode).getValue();
-                if (node.getKey().endsWith("/" + virtualhost)) {
+                String virtualhost = getResetNodeStream(node).findAny().orElse(data.undefNode()).getValue();
+                if (data.endsWith(node,"/" + virtualhost)) {
                     router.reset(virtualhost);
                 } else {
                     logger.warn("vh reset aborted: " + virtualhost + " not match with parent key " + node.getKey());
@@ -92,26 +72,19 @@ public class AutoResetter {
     }
 
     private Stream<EtcdNode> getResetNodeStream(final EtcdNode node) {
-        return Optional.ofNullable(node.getNodes()).orElse(Collections.emptyList())
-                .stream().filter(v -> v.getKey().equals(node.getKey() + "/reset"));
+        return data.listFrom(node).stream().filter(v -> v.getKey().equals(node.getKey() + "/reset"));
     }
 
     private boolean resetAll() {
-        final String keyResetAll = applicationPrefix + "/reset_all";
         final AtomicBoolean resetAll = new AtomicBoolean(false);
-        try {
-            final EtcdNode prefixNode = template.get(applicationPrefix).getNode();
-            final List<EtcdNode> nodes = Optional.ofNullable(prefixNode.getNodes()).orElse(Collections.emptyList());
-            logger.info("checking reset request");
-            nodes.forEach(node -> {
-                if (!node.isDir() && node.getKey().equals(keyResetAll)) {
-                    router.resetAll();
-                    resetAll.set(true);
-                }
-            });
-        } catch (EtcdException e) {
-            logger.error(e.getMessage());
-        }
+        final List<EtcdNode> nodes = data.listFrom(PREFIX_KEY);
+        logger.info("checking reset request");
+        nodes.forEach(node -> {
+            if (!node.isDir() && node.getKey().equals(RESET_ALL_KEY)) {
+                router.resetAll();
+                resetAll.set(true);
+            }
+        });
         return resetAll.get();
     }
 

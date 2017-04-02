@@ -5,6 +5,7 @@
 package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.Application;
+import io.github.tuxmonteiro.planc.services.ExternalData;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.IPAddressAccessControlHandler;
@@ -14,7 +15,6 @@ import io.undertow.util.Headers;
 import io.undertow.util.StatusCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.zalando.boot.etcd.EtcdClient;
 import org.zalando.boot.etcd.EtcdNode;
 
 import java.util.Arrays;
@@ -25,6 +25,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
+
 public class RuleInitializerHandler implements HttpHandler {
 
     public enum RuleType {
@@ -32,31 +34,30 @@ public class RuleInitializerHandler implements HttpHandler {
         UNDEF
     }
 
-    private EtcdClient template;
-
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final Set<String> rules = Collections.synchronizedSet(new HashSet<>());
     private final NameVirtualHostHandler nameVirtualHostHandler;
+    private ExternalData data;
 
     RuleInitializerHandler(final NameVirtualHostHandler nameVirtualHostHandler) {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
     }
 
-    public RuleInitializerHandler setTemplate(final EtcdClient template) {
-        this.template = template;
+    public RuleInitializerHandler setExternalData(final ExternalData externalData) {
+        this.data = externalData;
         return this;
     }
 
     @Override
     public synchronized void handleRequest(HttpServerExchange exchange) throws Exception {
-        String host = exchange.getRequestHeaders().get(Headers.HOST_STRING).getFirst();
-        final String virtualhostNodeName = "/" + Application.PREFIX + "/virtualhosts/" + host;
+        String host = exchange.getHostName();
+        final String virtualhostNodeName = VIRTUALHOSTS_KEY + "/" + host;
         final String rulesNodeName = virtualhostNodeName + "/rules";
 
         if (rules.isEmpty()) {
-            List<EtcdNode> hostNodes = Optional.ofNullable(template.get(virtualhostNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
-            final EtcdNode ruleNode = hostNodes.stream().filter(node -> node.getKey().equals(rulesNodeName)).findFirst().orElse(new EtcdNode());
+            List<EtcdNode> hostNodes = data.listFrom(virtualhostNodeName, true);
+            final EtcdNode ruleNode = hostNodes.stream().filter(node -> node.getKey().equals(rulesNodeName)).findFirst().orElse(data.nullNode());
             if (ruleNode.getKey() != null) {
                 final List<EtcdNode> rulesRegistered = Optional.ofNullable(ruleNode.getNodes()).orElse(Collections.emptyList());
                 if (!rulesRegistered.isEmpty()) {
@@ -76,7 +77,7 @@ public class RuleInitializerHandler implements HttpHandler {
                         if (RuleType.valueOf(type) == RuleType.PATH) {
                             final HttpHandler pathGlobHandler = new PathGlobHandler(ResponseCodeHandler.HANDLE_500);
                             final ProxyPoolInitializerHandler proxyPoolInitializerHandler = new ProxyPoolInitializerHandler(pathGlobHandler, ruleKey, order);
-                            proxyPoolInitializerHandler.setTemplate(template);
+                            proxyPoolInitializerHandler.setExternalData(data);
                             ((PathGlobHandler)pathGlobHandler).addPath(ruleDecoded, order, proxyPoolInitializerHandler);
                             final EtcdNode allow = hostNodes.stream().filter(node -> node.getKey().equals(virtualhostNodeName + "/allow")).findFirst().orElse(new EtcdNode());
                             final HttpHandler ruleTargetHandler;

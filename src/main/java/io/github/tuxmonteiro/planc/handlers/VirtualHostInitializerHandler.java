@@ -4,46 +4,45 @@
 
 package io.github.tuxmonteiro.planc.handlers;
 
-import io.github.tuxmonteiro.planc.Application;
+import io.github.tuxmonteiro.planc.services.ExternalData;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.server.handlers.ResponseCodeHandler;
-import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.zalando.boot.etcd.EtcdClient;
 
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Optional;
 import java.util.Set;
 
-public class VirtualHostInitializerHandler implements HttpHandler {
+import static io.github.tuxmonteiro.planc.services.ExternalData.PREFIX_KEY;
+import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
 
-    private EtcdClient template;
+public class VirtualHostInitializerHandler implements HttpHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final NameVirtualHostHandler nameVirtualHostHandler;
     private final Set<String> virtualhosts = Collections.synchronizedSet(new HashSet<>());
 
+    private ExternalData data;
+
     public VirtualHostInitializerHandler(final NameVirtualHostHandler nameVirtualHostHandler) {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
     }
 
-    public synchronized VirtualHostInitializerHandler setTemplate(final EtcdClient template) {
-        this.template = template;
+    public synchronized VirtualHostInitializerHandler setExternalData(final ExternalData externalData) {
+        this.data = externalData;
         return this;
     }
 
     @Override
     public synchronized void handleRequest(HttpServerExchange exchange) throws Exception {
-        final String host = exchange.getRequestHeaders().get(Headers.HOST_STRING).getFirst();
-        final String prefixNodeName = "/" + Application.PREFIX;
-        final String virtualhostNodePrefix = prefixNodeName + "/virtualhosts";
+        final String host = exchange.getHostName();
+        final String virtualhostNodePrefix = VIRTUALHOSTS_KEY;
         final String virtualhostNodeName = virtualhostNodePrefix + "/" + host;
-        boolean existVirtualhostPath = Optional.ofNullable(template.get(prefixNodeName).getNode().getNodes()).orElse(Collections.emptyList())
+        boolean existVirtualhostPath = data.listFrom(PREFIX_KEY)
                                     .stream()
                                     .filter(node -> node.getKey().equals(virtualhostNodePrefix))
                                     .count() != 0;
@@ -53,14 +52,14 @@ public class VirtualHostInitializerHandler implements HttpHandler {
             return;
         }
 
-        boolean existHost = Optional.ofNullable(template.get(virtualhostNodePrefix).getNode().getNodes()).orElse(Collections.emptyList())
+        boolean existHost = data.listFrom(virtualhostNodePrefix)
                 .stream()
                 .filter(node -> node.getKey().equals(virtualhostNodeName))
                 .count() != 0;
 
         if (existHost) {
             if (virtualhosts.add(host)) {
-                nameVirtualHostHandler.setDefaultHandler(new RuleInitializerHandler(nameVirtualHostHandler).setTemplate(template));
+                nameVirtualHostHandler.setDefaultHandler(new RuleInitializerHandler(nameVirtualHostHandler).setExternalData(data));
 
                 logger.info("add vh " + host + " (nameVirtualHostHandler: " + nameVirtualHostHandler.hashCode() + ")");
             }

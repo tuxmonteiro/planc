@@ -4,11 +4,11 @@
 
 package io.github.tuxmonteiro.planc.handlers;
 
-import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.client.ExtendedLoadBalancingProxyClient;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorAlgorithm;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorInitializer;
+import io.github.tuxmonteiro.planc.services.ExternalData;
 import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -19,7 +19,6 @@ import io.undertow.util.HeaderValues;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.zalando.boot.etcd.EtcdClient;
 import org.zalando.boot.etcd.EtcdNode;
 
 import java.net.URI;
@@ -30,11 +29,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static io.github.tuxmonteiro.planc.services.ExternalData.PREFIX_KEY;
+import static io.github.tuxmonteiro.planc.services.ExternalData.POOLS_KEY;
+import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
+
 public class ProxyPoolInitializerHandler implements HttpHandler {
 
     private static final String X_FAKE_TARGET = "X-Fake-Target";
-
-    private EtcdClient template;
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -49,6 +50,7 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
     private final String ruleKey;
     private final int order;
     private final ExtendedProxyHandler proxyHandler = new ExtendedProxyHandler(proxyClient, defaultHandler);
+    private ExternalData data;
 
     ProxyPoolInitializerHandler(final HttpHandler parentHandler, final String ruleKey, final int order) {
         this.parentHandler = parentHandler;
@@ -56,8 +58,8 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         this.order = order;
     }
 
-    public ProxyPoolInitializerHandler setTemplate(final EtcdClient template) {
-        this.template = template;
+    public ProxyPoolInitializerHandler setExternalData(final ExternalData externalData) {
+        this.data = externalData;
         return this;
     }
 
@@ -75,31 +77,31 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
             return;
         }
         String host = hostHeader.getFirst();
-        final String prefixNodeName = "/" + Application.PREFIX;
-        final String virtualhostNodePrefix = prefixNodeName + "/virtualhosts";
-        final String virtualhostNodeName = virtualhostNodePrefix + "/" + host;
+        final String prefixNodeName = PREFIX_KEY;
+        final String virtualhostNodeName = VIRTUALHOSTS_KEY + "/" + host;
         final String rulesNodeName = virtualhostNodeName + "/rules";
-        final String poolNodeName = prefixNodeName + "/pools";
-        final EtcdNode nodeEmpty = new EtcdNode();
-        nodeEmpty.setValue("");
+        final String poolNodeName = POOLS_KEY;
 
         if (isHostsEmpty(proxyClient)) {
 
-            final List<EtcdNode> rulesRegistered = Optional.ofNullable(template.get(rulesNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
+            final List<EtcdNode> rulesRegistered = data.listFrom(rulesNodeName, true);
 
-            final EtcdNode ruleNode = rulesRegistered.stream().filter(p -> p.getKey().equals(ruleKey)).findAny().orElse(nodeEmpty);
-            final String poolName = Optional.ofNullable(ruleNode.getNodes()).orElse(Collections.emptyList()).stream()
-                    .filter(n -> n.getKey().equals(ruleKey + "/target")).findAny().orElse(nodeEmpty).getValue();
+            final EtcdNode ruleNode = rulesRegistered.stream().filter(p -> p.getKey().equals(ruleKey)).findAny().orElse(data.emptyNode());
+            final String poolName = data.listFrom(ruleNode)
+                                        .stream().filter(n -> n.getKey().equals(ruleKey + "/target"))
+                                        .findAny().orElse(data.emptyNode()).getValue();
 
             if ("".equals(poolName)) {
                 this.defaultHandler.handleRequest(exchange);
                 return;
             }
 
-            final List<EtcdNode> poolsRegistered = Optional.ofNullable(template.get(poolNodeName, true).getNode().getNodes()).orElse(Collections.emptyList());
+            final List<EtcdNode> poolsRegistered = data.listFrom(poolNodeName, true);
 
             if (!poolsRegistered.isEmpty()) {
-                EtcdNode poolOfRuleSelected = poolsRegistered.stream().filter(p -> p.isDir() && p.getKey().equals(poolNodeName + "/" + poolName)).findAny().orElse(nodeEmpty);
+                EtcdNode poolOfRuleSelected = poolsRegistered.stream()
+                        .filter(p -> p.isDir() && p.getKey().equals(poolNodeName + "/" + poolName))
+                        .findAny().orElse(data.emptyNode());
                 if (!"".equals(poolOfRuleSelected.getKey())) {
                     logger.info("creating targetsPool (" +
                             "parentHandler: " + parentHandler.hashCode() + ", " +
