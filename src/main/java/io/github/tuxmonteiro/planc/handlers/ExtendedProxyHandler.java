@@ -6,6 +6,7 @@ package io.github.tuxmonteiro.planc.handlers;
 import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.client.hostselectors.ClientStatisticsMarker;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
+import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.attribute.ExchangeAttribute;
 import io.undertow.attribute.ExchangeAttributes;
 import io.undertow.attribute.ResponseTimeAttribute;
@@ -38,6 +39,7 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
     private final StatsdCompletionListener statsdCompletionListener = new StatsdCompletionListener();
     private final ResponseTimeAttribute responseTimeAttribute = new ResponseTimeAttribute(TimeUnit.MILLISECONDS);
     private final ProxyHandler proxyHandler;
+    private StatsdClient statsdClient;
 
     public ExtendedProxyHandler(ProxyClient proxyClient, int maxRequestTime, HttpHandler next) {
         proxyHandler = new ProxyHandler(proxyClient, maxRequestTime, next);
@@ -54,6 +56,10 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
         proxyHandler.handleRequest(exchange);
     }
 
+    public ExtendedProxyHandler setStatsdClient(final StatsdClient statsdClient) {
+        this.statsdClient = statsdClient;
+        return this;
+    }
 
     private class AccessLogCompletionListener implements ExchangeCompletionListener {
 
@@ -98,7 +104,7 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
                 final Integer responseTime = getResponseTime(exchange);
                 final String method = exchange.getRequestMethod().toString();
 
-                final String key = Application.PREFIX + "." + cleanUpKey(virtualhost) + "." + cleanUpKey(targetUri);
+                final String key = cleanUpKey(virtualhost) + "." + cleanUpKey(targetUri);
                 sendStatusCodeCount(key, statusCode, targetIsUndef);
                 sendActiveConnCount(key, clientOpenConnection, targetIsUndef);
                 sendHttpMethodCount(key, method);
@@ -113,21 +119,25 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
 
         private void sendStatusCodeCount(String key, Integer statusCode, boolean targetIsUndef) {
             int realStatusCode = targetIsUndef ? 503 : statusCode;
-            String fullKey = key + "." + realStatusCode;
+            String fullKey = key + ".status." + realStatusCode;
+            statsdClient.incr(fullKey);
         }
 
         private void sendActiveConnCount(String key, Integer clientOpenConnection, boolean targetIsUndef) {
             int conn = (clientOpenConnection != null && !targetIsUndef) ? clientOpenConnection : 0;
             String fullKey = key + ".activeConns";
+            statsdClient.gauge(fullKey, conn);
         }
 
         private void sendHttpMethodCount(String key, String method) {
-            String fullKey = key + "." + method;
+            String fullKey = key + ".method." + method;
+            statsdClient.count(fullKey, 1);
         }
 
         private void sendResponseTime(String key, long requestTime, boolean targetIsUndef) {
             long realRequestTime = targetIsUndef ? 0 : requestTime;
             String fullKey = key + ".responseTime";
+            statsdClient.timing(fullKey, realRequestTime);
         }
 
         private int getResponseTime(HttpServerExchange exchange) {

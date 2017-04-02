@@ -9,6 +9,7 @@ import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorAlgorithm;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorInitializer;
 import io.github.tuxmonteiro.planc.services.ExternalData;
+import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -60,6 +61,11 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
 
     public ProxyPoolInitializerHandler setExternalData(final ExternalData externalData) {
         this.data = externalData;
+        return this;
+    }
+
+    public ProxyPoolInitializerHandler setStatsdClient(final StatsdClient statsdClient) {
+        proxyHandler.setStatsdClient(statsdClient);
         return this;
     }
 

@@ -6,6 +6,7 @@ package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.services.ExternalData;
+import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.IPAddressAccessControlHandler;
@@ -39,6 +40,7 @@ public class RuleInitializerHandler implements HttpHandler {
     private final Set<String> rules = Collections.synchronizedSet(new HashSet<>());
     private final NameVirtualHostHandler nameVirtualHostHandler;
     private ExternalData data;
+    private StatsdClient statsdClient;
 
     RuleInitializerHandler(final NameVirtualHostHandler nameVirtualHostHandler) {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
@@ -46,6 +48,11 @@ public class RuleInitializerHandler implements HttpHandler {
 
     public RuleInitializerHandler setExternalData(final ExternalData externalData) {
         this.data = externalData;
+        return this;
+    }
+
+    public RuleInitializerHandler setStatsdClient(StatsdClient statsdClient) {
+        this.statsdClient = statsdClient;
         return this;
     }
 
@@ -77,7 +84,7 @@ public class RuleInitializerHandler implements HttpHandler {
                         if (RuleType.valueOf(type) == RuleType.PATH) {
                             final HttpHandler pathGlobHandler = new PathGlobHandler(ResponseCodeHandler.HANDLE_500);
                             final ProxyPoolInitializerHandler proxyPoolInitializerHandler = new ProxyPoolInitializerHandler(pathGlobHandler, ruleKey, order);
-                            proxyPoolInitializerHandler.setExternalData(data);
+                            proxyPoolInitializerHandler.setExternalData(data).setStatsdClient(statsdClient);
                             ((PathGlobHandler)pathGlobHandler).addPath(ruleDecoded, order, proxyPoolInitializerHandler);
                             final EtcdNode allow = hostNodes.stream().filter(node -> node.getKey().equals(virtualhostNodeName + "/allow")).findFirst().orElse(new EtcdNode());
                             final HttpHandler ruleTargetHandler;

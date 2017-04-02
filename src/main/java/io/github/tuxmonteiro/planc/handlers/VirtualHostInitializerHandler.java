@@ -5,6 +5,7 @@
 package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.services.ExternalData;
+import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.NameVirtualHostHandler;
@@ -27,6 +28,7 @@ public class VirtualHostInitializerHandler implements HttpHandler {
     private final Set<String> virtualhosts = Collections.synchronizedSet(new HashSet<>());
 
     private ExternalData data;
+    private StatsdClient statsdClient;
 
     public VirtualHostInitializerHandler(final NameVirtualHostHandler nameVirtualHostHandler) {
         this.nameVirtualHostHandler = nameVirtualHostHandler;
@@ -34,6 +36,11 @@ public class VirtualHostInitializerHandler implements HttpHandler {
 
     public synchronized VirtualHostInitializerHandler setExternalData(final ExternalData externalData) {
         this.data = externalData;
+        return this;
+    }
+
+    public synchronized VirtualHostInitializerHandler setStatsdClient(final StatsdClient statsdClient) {
+        this.statsdClient = statsdClient;
         return this;
     }
 
@@ -59,7 +66,8 @@ public class VirtualHostInitializerHandler implements HttpHandler {
 
         if (existHost) {
             if (virtualhosts.add(host)) {
-                nameVirtualHostHandler.setDefaultHandler(new RuleInitializerHandler(nameVirtualHostHandler).setExternalData(data));
+                nameVirtualHostHandler.setDefaultHandler(new RuleInitializerHandler(nameVirtualHostHandler)
+                        .setExternalData(data).setStatsdClient(statsdClient));
 
                 logger.info("add vh " + host + " (nameVirtualHostHandler: " + nameVirtualHostHandler.hashCode() + ")");
             }

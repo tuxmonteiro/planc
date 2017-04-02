@@ -22,14 +22,16 @@ import javax.annotation.PostConstruct;
 public class Router {
 
     private final ExternalData data;
+    private final StatsdClient statsdClient;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
     private final NameVirtualHostHandler nameVirtualHostHandler = new NameVirtualHostHandler();
     private final VirtualHostInitializerHandler virtualHostInitializerHandler = new VirtualHostInitializerHandler(nameVirtualHostHandler);
     private Undertow undertow = null;
 
     @Autowired
-    public Router(final ExternalData externalData) {
+    public Router(final ExternalData externalData, final StatsdClient statsdClient) {
         this.data = externalData;
+        this.statsdClient = statsdClient;
     }
 
     @PostConstruct
@@ -38,7 +40,7 @@ public class Router {
 
         nameVirtualHostHandler.addHost("__ping__", pingHandler());
 
-        nameVirtualHostHandler.setDefaultHandler(virtualHostInitializerHandler.setExternalData(data));
+        nameVirtualHostHandler.setDefaultHandler(virtualHostInitializerHandler.setExternalData(data).setStatsdClient(statsdClient));
         undertow = Undertow.builder().addHttpListener(8000, "0.0.0.0", nameVirtualHostHandler)
                 .setIoThreads(4)
                 .setWorkerThreads(4 * 8)
