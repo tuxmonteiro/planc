@@ -27,11 +27,13 @@ public class ExternalData {
     private final EtcdNode nullNode = new EtcdNode();
     private final EtcdNode emptyNode = nullNode;
     private final EtcdNode undefNode = nullNode;
+    private final EtcdNode zeroNode = nullNode;
 
     public ExternalData(@Value("#{etcdClient}") final EtcdClient template) {
         this.client = template;
         emptyNode.setValue("");
         undefNode.setValue("UNDEF");
+        zeroNode.setValue("0");
     }
 
     public EtcdClient client() {
@@ -73,6 +75,10 @@ public class ExternalData {
 
     public EtcdNode undefNode() {
         return undefNode;
+    }
+
+    public EtcdNode zeroNode() {
+        return zeroNode;
     }
 
     public boolean exist(String key) {

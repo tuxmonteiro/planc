@@ -13,6 +13,7 @@ import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Service;
 import org.xnio.Options;
 
@@ -21,17 +22,17 @@ import javax.annotation.PostConstruct;
 @Service
 public class Router {
 
-    private final ExternalData data;
-    private final StatsdClient statsdClient;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
-    private final NameVirtualHostHandler nameVirtualHostHandler = new NameVirtualHostHandler();
-    private final VirtualHostInitializerHandler virtualHostInitializerHandler = new VirtualHostInitializerHandler(nameVirtualHostHandler);
+
     private Undertow undertow = null;
 
+    private final VirtualHostInitializerHandler virtualHostInitializerHandler;
+    private final NameVirtualHostHandler nameVirtualHostHandler;
+
     @Autowired
-    public Router(final ExternalData externalData, final StatsdClient statsdClient) {
-        this.data = externalData;
-        this.statsdClient = statsdClient;
+    public Router(final VirtualHostInitializerHandler virtualHostInitializerHandler, final NameVirtualHostHandler nameVirtualHostHandler) {
+        this.nameVirtualHostHandler = nameVirtualHostHandler;
+        this.virtualHostInitializerHandler = virtualHostInitializerHandler;
     }
 
     @PostConstruct
@@ -40,7 +41,7 @@ public class Router {
 
         nameVirtualHostHandler.addHost("__ping__", pingHandler());
 
-        nameVirtualHostHandler.setDefaultHandler(virtualHostInitializerHandler.setExternalData(data).setStatsdClient(statsdClient));
+        nameVirtualHostHandler.setDefaultHandler(virtualHostInitializerHandler);
         undertow = Undertow.builder().addHttpListener(8000, "0.0.0.0", nameVirtualHostHandler)
                 .setIoThreads(4)
                 .setWorkerThreads(4 * 8)

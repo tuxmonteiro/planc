@@ -9,7 +9,6 @@ import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorAlgorithm;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelectorInitializer;
 import io.github.tuxmonteiro.planc.services.ExternalData;
-import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.client.UndertowClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
@@ -20,9 +19,13 @@ import io.undertow.util.HeaderValues;
 import io.undertow.util.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
 import org.zalando.boot.etcd.EtcdNode;
 
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -33,13 +36,14 @@ import java.util.Optional;
 import static io.github.tuxmonteiro.planc.services.ExternalData.POOLS_KEY;
 import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
 
+@Component
+@Scope("prototype")
 public class ProxyPoolInitializerHandler implements HttpHandler {
 
     private static final String X_FAKE_TARGET = "X-Fake-Target";
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final HttpHandler parentHandler;
     private final HostSelector hostSelectorInicializer = new HostSelectorInitializer();
     private final ProxyClient proxyClient = new ExtendedLoadBalancingProxyClient(UndertowClient.getInstance(), exchange -> {
                                                 // we always create a new connection for upgrade requests
@@ -47,105 +51,94 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
                                             }, hostSelectorInicializer)
                                             .setConnectionsPerThread(2000);
     private final HttpHandler defaultHandler = ResponseCodeHandler.HANDLE_500;
-    private final String ruleKey;
-    private final int order;
-    private final ExtendedProxyHandler proxyHandler = new ExtendedProxyHandler(proxyClient, defaultHandler);
-    private ExternalData data;
+    private HttpHandler parentHandler;
+    private String ruleKey;
+    private int ruleOrder;
 
-    ProxyPoolInitializerHandler(final HttpHandler parentHandler, final String ruleKey, final int order) {
-        this.parentHandler = parentHandler;
-        this.ruleKey = ruleKey;
-        this.order = order;
-    }
+    private final ExternalData data;
+    private final ExtendedProxyHandler proxyHandler;
 
-    public ProxyPoolInitializerHandler setExternalData(final ExternalData externalData) {
+    @Autowired
+    ProxyPoolInitializerHandler(final ExternalData externalData, final ExtendedProxyHandler proxyHandler) {
         this.data = externalData;
-        return this;
-    }
-
-    public ProxyPoolInitializerHandler setStatsdClient(final StatsdClient statsdClient) {
-        proxyHandler.setStatsdClient(statsdClient);
-        return this;
+        this.proxyHandler = proxyHandler.setProxyClientAndDefaultHandler(proxyClient, defaultHandler);
     }
 
     @Override
     public void handleRequest(HttpServerExchange exchange) throws Exception {
-        final HeaderMap requestHeaders = exchange.getRequestHeaders();
-        final HeaderValues faKeTargetHeader = requestHeaders.get(X_FAKE_TARGET);
-        if (faKeTargetHeader != null && !faKeTargetHeader.isEmpty()) {
-            fakeTargetHandler().handleRequest(exchange);
-            return;
-        }
-        final HeaderValues hostHeader = requestHeaders.get(Headers.HOST_STRING);
-        if (hostHeader == null) {
-            ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
-            return;
-        }
-        String host = hostHeader.getFirst();
-        final String virtualhostNodeName = VIRTUALHOSTS_KEY + "/" + host;
-        final String rulesNodeName = virtualhostNodeName + "/rules";
-        final String poolNodeName = POOLS_KEY;
+        if (isFake(exchange)) return;
+
+        String host = exchange.getHostName();
+        final String rulesNodeName = VIRTUALHOSTS_KEY + "/" + host + "/rules";
 
         if (isHostsEmpty(proxyClient)) {
+            final String poolName = data.node(ruleKey + "/target").getValue();
 
-            final List<EtcdNode> rulesRegistered = data.listFrom(rulesNodeName, true);
-
-            final EtcdNode ruleNode = rulesRegistered.stream().filter(p -> p.getKey().equals(ruleKey)).findAny().orElse(data.emptyNode());
-            final String poolName = data.listFrom(ruleNode)
-                                        .stream().filter(n -> n.getKey().equals(ruleKey + "/target"))
-                                        .findAny().orElse(data.emptyNode()).getValue();
-
-            if ("".equals(poolName)) {
+            if (poolName == null) {
                 this.defaultHandler.handleRequest(exchange);
                 return;
             }
 
-            final List<EtcdNode> poolsRegistered = data.listFrom(poolNodeName, true);
-
-            if (!poolsRegistered.isEmpty()) {
-                EtcdNode poolOfRuleSelected = poolsRegistered.stream()
-                        .filter(p -> p.isDir() && p.getKey().equals(poolNodeName + "/" + poolName))
-                        .findAny().orElse(data.emptyNode());
-                if (!"".equals(poolOfRuleSelected.getKey())) {
-                    logger.info("creating targetsPool (" +
-                            "parentHandler: " + parentHandler.hashCode() + ", " +
-                            "proxyHandler: " + proxyHandler.hashCode() + ", " +
-                            "proxyClient: " + proxyClient.hashCode() + ", " +
-                            "hostSelectorInicializer: " + hostSelectorInicializer.hashCode() + ")");
-
-                    final List<EtcdNode> poolAttributes = Optional.ofNullable(poolOfRuleSelected.getNodes()).orElse(Collections.emptyList());
-                    final List<EtcdNode> targets = new ArrayList<>();
-                    poolAttributes.forEach(attrib -> {
-                        if (attrib.getKey().equals(poolNodeName + "/" + poolName + "/loadbalance")) {
-                            mapToTargetHostSelector(hostSelectorInicializer, HostSelectorAlgorithm.valueOf(attrib.getValue()).getHostSelector());
-                            logger.info("LoadBalance algorithm: " + attrib.getValue());
-                        }
-                        if (attrib.getKey().equals(poolNodeName + "/" + poolName + "/targets")) {
-                            targets.addAll(Optional.ofNullable(attrib.getNodes()).orElse(Collections.emptyList()));
-                        }
-                    });
-                    targets.forEach(target -> {
-                        addHost(proxyClient, URI.create(target.getValue()));
-                        logger.info("added target " + target.getValue());
-                    });
-                } else {
-                    logger.warn("pool " + poolName + " is empty [" + poolNodeName + "/" + poolName + "]");
-                }
-                int ruleFromIndex = ruleKey.lastIndexOf("/");
-                String rule = ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
-                String ruleDecoded = new String(Base64.getDecoder().decode(rule), StandardCharsets.UTF_8);
-                if (parentHandler instanceof PathGlobHandler) {
-                    ((PathGlobHandler) parentHandler).addPath(ruleDecoded, order, proxyHandler);
-                }
-                proxyHandler.handleRequest(exchange);
-                if (isHostsEmpty(proxyClient)) {
-                    logger.error("hosts is empty");
-                }
-                return;
+            final String poolNameKey = POOLS_KEY + "/" + poolName;
+            if (data.node(poolNameKey).getKey() != null) {
+                logHashCodes();
+                loadTargetsAndPoolAttributes(poolNameKey);
+            } else {
+                logger.warn("pool " + poolName + " is empty [" + poolNameKey + "]");
+            }
+            String ruleDecoded = extractRuleDecoded();
+            if (parentHandler instanceof PathGlobHandler) {
+                ((PathGlobHandler) parentHandler).addPath(ruleDecoded, ruleOrder, proxyHandler);
+            }
+            proxyHandler.handleRequest(exchange);
+            if (isHostsEmpty(proxyClient)) {
+                logger.error("hosts is empty");
             }
         }
 
         this.defaultHandler.handleRequest(exchange);
+    }
+
+    private void logHashCodes() {
+        logger.info("creating targetsPool (" +
+                "parentHandler: " + parentHandler.hashCode() + ", " +
+                "proxyHandler: " + proxyHandler.hashCode() + ", " +
+                "proxyClient: " + proxyClient.hashCode() + ", " +
+                "hostSelectorInicializer: " + hostSelectorInicializer.hashCode() + ")");
+    }
+
+    private String extractRuleDecoded() {
+        int ruleFromIndex = ruleKey.lastIndexOf("/");
+        String rule = ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
+        return new String(Base64.getDecoder().decode(rule.getBytes(Charset.defaultCharset())), Charset.defaultCharset());
+    }
+
+    private boolean isFake(HttpServerExchange exchange) throws Exception {
+        final HeaderMap requestHeaders = exchange.getRequestHeaders();
+        final HeaderValues faKeTargetHeader = requestHeaders.get(X_FAKE_TARGET);
+        if (faKeTargetHeader != null && !faKeTargetHeader.isEmpty()) {
+            fakeTargetHandler().handleRequest(exchange);
+            return true;
+        }
+        return false;
+    }
+
+    private void loadTargetsAndPoolAttributes(String poolNameKey) {
+        final List<EtcdNode> poolAttributes = data.listFrom(poolNameKey, true);
+        final List<EtcdNode> targets = new ArrayList<>();
+        poolAttributes.forEach(attrib -> {
+            if (attrib.getKey().equals(poolNameKey + "/loadbalance")) {
+                mapToTargetHostSelector(hostSelectorInicializer, HostSelectorAlgorithm.valueOf(attrib.getValue()).getHostSelector());
+                logger.info("LoadBalance algorithm: " + attrib.getValue());
+            }
+            if (attrib.getKey().equals(poolNameKey + "/targets")) {
+                targets.addAll(data.listFrom(attrib));
+            }
+        });
+        targets.forEach(target -> {
+            addHost(proxyClient, URI.create(target.getValue()));
+            logger.info("added target " + target.getValue());
+        });
     }
 
     private HttpHandler fakeTargetHandler() {
@@ -168,4 +161,18 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
         return ((ExtendedLoadBalancingProxyClient)proxyClient).isHostsEmpty();
     }
 
+    public ProxyPoolInitializerHandler setParentHandler(final HttpHandler parentHandler) {
+        this.parentHandler = parentHandler;
+        return this;
+    }
+
+    public ProxyPoolInitializerHandler setRuleKey(String ruleKey) {
+        this.ruleKey = ruleKey;
+        return this;
+    }
+
+    public ProxyPoolInitializerHandler setRuleOrder(int ruleOrder) {
+        this.ruleOrder = ruleOrder;
+        return this;
+    }
 }

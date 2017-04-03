@@ -17,12 +17,17 @@ import io.undertow.server.handlers.proxy.ProxyClient;
 import io.undertow.server.handlers.proxy.ProxyHandler;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Scope;
 import org.springframework.http.HttpHeaders;
+import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Component
+@Scope("prototype")
 public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCode {
 
     private static final int MAX_REQUEST_TIME = Integer.MAX_VALUE - 1;
@@ -37,15 +42,13 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
     private final AccessLogCompletionListener accessLogCompletionListener = new AccessLogCompletionListener();
     private final StatsdCompletionListener statsdCompletionListener = new StatsdCompletionListener();
     private final ResponseTimeAttribute responseTimeAttribute = new ResponseTimeAttribute(TimeUnit.MILLISECONDS);
-    private final ProxyHandler proxyHandler;
-    private StatsdClient statsdClient;
+    private ProxyHandler proxyHandler;
 
-    public ExtendedProxyHandler(ProxyClient proxyClient, int maxRequestTime, HttpHandler next) {
-        proxyHandler = new ProxyHandler(proxyClient, maxRequestTime, next);
-    }
+    private final StatsdClient statsdClient;
 
-    public ExtendedProxyHandler(ProxyClient proxyClient, HttpHandler defaultHandler) {
-        proxyHandler = new ProxyHandler(proxyClient, defaultHandler);
+    @Autowired
+    public ExtendedProxyHandler(final StatsdClient statsdClient) {
+        this.statsdClient = statsdClient;
     }
 
     @Override
@@ -55,8 +58,8 @@ public class ExtendedProxyHandler implements HttpHandler, ProcessorLocalStatusCo
         proxyHandler.handleRequest(exchange);
     }
 
-    public ExtendedProxyHandler setStatsdClient(final StatsdClient statsdClient) {
-        this.statsdClient = statsdClient;
+    public ExtendedProxyHandler setProxyClientAndDefaultHandler(final ProxyClient proxyClient, final HttpHandler defaultHandler) {
+        proxyHandler = new ProxyHandler(proxyClient, defaultHandler);
         return this;
     }
 

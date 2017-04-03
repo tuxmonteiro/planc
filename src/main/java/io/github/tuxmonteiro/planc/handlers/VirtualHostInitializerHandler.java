@@ -5,13 +5,16 @@
 package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.services.ExternalData;
-import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.server.handlers.ResponseCodeHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -20,28 +23,23 @@ import java.util.Set;
 import static io.github.tuxmonteiro.planc.services.ExternalData.PREFIX_KEY;
 import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
 
+@Component
+@Scope("prototype")
 public class VirtualHostInitializerHandler implements HttpHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
-    private final NameVirtualHostHandler nameVirtualHostHandler;
     private final Set<String> virtualhosts = Collections.synchronizedSet(new HashSet<>());
+    private final ExternalData data;
+    private final ApplicationContext context;
 
-    private ExternalData data;
-    private StatsdClient statsdClient;
+    private final NameVirtualHostHandler nameVirtualHostHandler;
 
-    public VirtualHostInitializerHandler(final NameVirtualHostHandler nameVirtualHostHandler) {
-        this.nameVirtualHostHandler = nameVirtualHostHandler;
-    }
-
-    public synchronized VirtualHostInitializerHandler setExternalData(final ExternalData externalData) {
+    @Autowired
+    public VirtualHostInitializerHandler(final ExternalData externalData, final NameVirtualHostHandler nameVirtualHostHandler, final ApplicationContext context) {
         this.data = externalData;
-        return this;
-    }
-
-    public synchronized VirtualHostInitializerHandler setStatsdClient(final StatsdClient statsdClient) {
-        this.statsdClient = statsdClient;
-        return this;
+        this.nameVirtualHostHandler = nameVirtualHostHandler;
+        this.context = context;
     }
 
     @Override
@@ -66,8 +64,7 @@ public class VirtualHostInitializerHandler implements HttpHandler {
 
         if (existHost) {
             if (virtualhosts.add(host)) {
-                nameVirtualHostHandler.setDefaultHandler(new RuleInitializerHandler(nameVirtualHostHandler)
-                        .setExternalData(data).setStatsdClient(statsdClient));
+                nameVirtualHostHandler.setDefaultHandler(context.getBean(RuleInitializerHandler.class));
 
                 logger.info("add vh " + host + " (nameVirtualHostHandler: " + nameVirtualHostHandler.hashCode() + ")");
             }

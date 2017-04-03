@@ -5,17 +5,20 @@
 package io.github.tuxmonteiro.planc.handlers;
 
 import io.github.tuxmonteiro.planc.services.ExternalData;
-import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.server.HttpHandler;
 import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.IPAddressAccessControlHandler;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.server.handlers.ResponseCodeHandler;
-import io.undertow.util.StatusCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.annotation.Scope;
+import org.springframework.stereotype.Component;
 import org.zalando.boot.etcd.EtcdNode;
 
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collections;
@@ -26,6 +29,8 @@ import java.util.Set;
 
 import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
 
+@Component
+@Scope("prototype")
 public class RuleInitializerHandler implements HttpHandler {
 
     public enum RuleType {
@@ -36,22 +41,16 @@ public class RuleInitializerHandler implements HttpHandler {
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     private final Set<String> rules = Collections.synchronizedSet(new HashSet<>());
+
+    private final ExternalData data;
     private final NameVirtualHostHandler nameVirtualHostHandler;
-    private ExternalData data;
-    private StatsdClient statsdClient;
+    private final ApplicationContext context;
 
-    RuleInitializerHandler(final NameVirtualHostHandler nameVirtualHostHandler) {
+    @Autowired
+    public RuleInitializerHandler(final ExternalData data, final NameVirtualHostHandler nameVirtualHostHandler, final ApplicationContext context) {
+        this.data = data;
         this.nameVirtualHostHandler = nameVirtualHostHandler;
-    }
-
-    public RuleInitializerHandler setExternalData(final ExternalData externalData) {
-        this.data = externalData;
-        return this;
-    }
-
-    public RuleInitializerHandler setStatsdClient(StatsdClient statsdClient) {
-        this.statsdClient = statsdClient;
-        return this;
+        this.context = context;
     }
 
     @Override
@@ -61,47 +60,11 @@ public class RuleInitializerHandler implements HttpHandler {
         final String rulesNodeName = virtualhostNodeName + "/rules";
 
         if (rules.isEmpty()) {
-            List<EtcdNode> hostNodes = data.listFrom(virtualhostNodeName, true);
-            final EtcdNode ruleNode = hostNodes.stream().filter(node -> node.getKey().equals(rulesNodeName)).findFirst().orElse(data.nullNode());
+            final EtcdNode ruleNode = findRuleNode(rulesNodeName);
             if (ruleNode.getKey() != null) {
-                final List<EtcdNode> rulesRegistered = Optional.ofNullable(ruleNode.getNodes()).orElse(Collections.emptyList());
+                final List<EtcdNode> rulesRegistered = data.listFrom(ruleNode);
                 if (!rulesRegistered.isEmpty()) {
-                    rulesRegistered.stream().filter(EtcdNode::isDir).forEach((EtcdNode keyComplete) -> {
-                        String ruleKey = keyComplete.getKey();
-                        int ruleFromIndex = ruleKey.lastIndexOf("/");
-                        String rule = ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
-                        final EtcdNode nodeWithZero = new EtcdNode();
-                        final EtcdNode nodeWithUndef = new EtcdNode();
-                        nodeWithZero.setValue("0");
-                        nodeWithUndef.setValue(RuleType.UNDEF.toString());
-                        final Set<EtcdNode> nodes = new HashSet<>(Optional.ofNullable(keyComplete.getNodes()).orElse(Collections.emptyList()));
-                        int order = Integer.valueOf(nodes.stream().filter(n -> n.getKey().equals(ruleKey + "/order")).findAny().orElse(nodeWithZero).getValue());
-                        String type = nodes.stream().filter(n -> n.getKey().equals(ruleKey + "/type")).findAny().orElse(nodeWithUndef).getValue();
-                        String ruleDecoded = new String(Base64.getDecoder().decode(rule)).trim();
-                        logger.info("add rule " + ruleDecoded + " [order:" + order + ", type:"+ type +"]");
-                        if (RuleType.valueOf(type) == RuleType.PATH) {
-                            final HttpHandler pathGlobHandler = new PathGlobHandler(ResponseCodeHandler.HANDLE_500);
-                            final ProxyPoolInitializerHandler proxyPoolInitializerHandler = new ProxyPoolInitializerHandler(pathGlobHandler, ruleKey, order);
-                            proxyPoolInitializerHandler.setExternalData(data).setStatsdClient(statsdClient);
-                            ((PathGlobHandler)pathGlobHandler).addPath(ruleDecoded, order, proxyPoolInitializerHandler);
-                            final EtcdNode allow = hostNodes.stream().filter(node -> node.getKey().equals(virtualhostNodeName + "/allow")).findFirst().orElse(new EtcdNode());
-                            final HttpHandler ruleTargetHandler;
-                            if (allow.getKey() != null) {
-                                ruleTargetHandler = new IPAddressAccessControlHandler(pathGlobHandler, StatusCodes.FORBIDDEN);
-                                Arrays.stream(allow.getValue().split(",")).forEach(((IPAddressAccessControlHandler)ruleTargetHandler)::addAllow);
-                            } else {
-                                ruleTargetHandler = pathGlobHandler;
-                            }
-                            nameVirtualHostHandler.addHost(host, ruleTargetHandler);
-
-                            rules.add(ruleDecoded);
-
-                            logger.info("Rule httpHandler: (" + pathGlobHandler.getClass().getSimpleName() + ") " + pathGlobHandler.hashCode() + ", " +
-                                    "proxyPoolInitializerHandler: " + proxyPoolInitializerHandler.hashCode() + ")");
-                        } else {
-                            nameVirtualHostHandler.setDefaultHandler(ResponseCodeHandler.HANDLE_500);
-                        }
-                    });
+                    loadAllRules(host, rulesRegistered);
                     nameVirtualHostHandler.handleRequest(exchange);
                     return;
                 }
@@ -113,6 +76,84 @@ public class RuleInitializerHandler implements HttpHandler {
         String pathRequested = exchange.getRelativePath();
         logger.error(this + ": " + host + "@" + pathRequested);
         ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
+    }
+
+    private void loadAllRules(String host, final List<EtcdNode> rulesRegistered) {
+        for (EtcdNode keyComplete : rulesRegistered) {
+            if (keyComplete.isDir()) {
+                String ruleKey = keyComplete.getKey();
+                Integer order = extractRuleOrder(ruleKey);
+                String type = extractRuleType(ruleKey);
+                String rule = extractRule(ruleKey);
+                String ruleDecoded = extractRuleDecoded(rule);
+
+                logger.info("add rule " + ruleDecoded + " [order:" + order + ", type:" + type + "]");
+
+                if (RuleType.valueOf(type) == RuleType.PATH) {
+                    final HttpHandler pathGlobHandler = newPathGlobHandler();
+                    final ProxyPoolInitializerHandler proxyPoolInitializerHandler = newProxyPoolInitializerHandler(ruleKey, order, pathGlobHandler);
+                    ((PathGlobHandler) pathGlobHandler).addPath(ruleDecoded, order, proxyPoolInitializerHandler);
+                    final HttpHandler ruleTargetHandler = defineRuleTargetHandler(pathGlobHandler, VIRTUALHOSTS_KEY + "/" + host);
+                    nameVirtualHostHandler.addHost(host, ruleTargetHandler);
+
+                    rules.add(ruleDecoded);
+
+                    logger.info("Rule httpHandler: (" + pathGlobHandler.getClass().getSimpleName() + ") " + pathGlobHandler.hashCode() + ", " +
+                            "proxyPoolInitializerHandler: " + proxyPoolInitializerHandler.hashCode() + ")");
+                } else {
+                    nameVirtualHostHandler.setDefaultHandler(ResponseCodeHandler.HANDLE_500);
+                }
+            }
+        }
+    }
+
+    private HttpHandler defineRuleTargetHandler(final HttpHandler pathGlobHandler, final String virtualhostNodeName) {
+        final EtcdNode allow = extractAllowAttribute(virtualhostNodeName);
+        final HttpHandler ruleTargetHandler;
+        if (allow.getKey() != null) {
+            ruleTargetHandler = newIpAddressAccessControlHandler(pathGlobHandler);
+            Arrays.stream(allow.getValue().split(",")).forEach(((IPAddressAccessControlHandler) ruleTargetHandler)::addAllow);
+        } else {
+            ruleTargetHandler = pathGlobHandler;
+        }
+        return ruleTargetHandler;
+    }
+
+    private PathGlobHandler newPathGlobHandler() {
+        return context.getBean(PathGlobHandler.class);
+    }
+
+    private IPAddressAccessControlHandler newIpAddressAccessControlHandler(final HttpHandler pathGlobHandler) {
+        return context.getBean(IPAddressAccessControlHandler.class).setNext(pathGlobHandler);
+    }
+
+    private ProxyPoolInitializerHandler newProxyPoolInitializerHandler(String ruleKey, Integer order, final HttpHandler pathGlobHandler) {
+        return context.getBean(ProxyPoolInitializerHandler.class).setParentHandler(pathGlobHandler).setRuleKey(ruleKey).setRuleOrder(order);
+    }
+
+    private EtcdNode extractAllowAttribute(String virtualhostNodeName) {
+        return data.node(virtualhostNodeName + "/allow");
+    }
+
+    private EtcdNode findRuleNode(String rulesNodeName) {
+        return data.node(rulesNodeName);
+    }
+
+    private String extractRule(String ruleKey) {
+        int ruleFromIndex = ruleKey.lastIndexOf("/");
+        return ruleKey.substring(ruleFromIndex + 1, ruleKey.length());
+    }
+
+    private String extractRuleDecoded(String rule) {
+        return new String(Base64.getDecoder().decode(rule.getBytes(Charset.defaultCharset())), Charset.defaultCharset()).trim();
+    }
+
+    private String extractRuleType(String ruleKey) {
+        return Optional.ofNullable(data.node(ruleKey + "/type").getValue()).orElse(RuleType.PATH.toString());
+    }
+
+    private Integer extractRuleOrder(String ruleKey) {
+        return Integer.valueOf(Optional.ofNullable(data.node(ruleKey + "/order").getValue()).orElse("0"));
     }
 
     public synchronized void reset() {
