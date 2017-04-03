@@ -30,7 +30,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
-import static io.github.tuxmonteiro.planc.services.ExternalData.PREFIX_KEY;
 import static io.github.tuxmonteiro.planc.services.ExternalData.POOLS_KEY;
 import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
 
@@ -83,7 +82,6 @@ public class ProxyPoolInitializerHandler implements HttpHandler {
             return;
         }
         String host = hostHeader.getFirst();
-        final String prefixNodeName = PREFIX_KEY;
         final String virtualhostNodeName = VIRTUALHOSTS_KEY + "/" + host;
         final String rulesNodeName = virtualhostNodeName + "/rules";
         final String poolNodeName = POOLS_KEY;

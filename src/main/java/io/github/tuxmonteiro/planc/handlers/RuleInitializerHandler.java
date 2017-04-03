@@ -4,7 +4,6 @@
 
 package io.github.tuxmonteiro.planc.handlers;
 
-import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.services.ExternalData;
 import io.github.tuxmonteiro.planc.services.StatsdClient;
 import io.undertow.server.HttpHandler;
@@ -12,7 +11,6 @@ import io.undertow.server.HttpServerExchange;
 import io.undertow.server.handlers.IPAddressAccessControlHandler;
 import io.undertow.server.handlers.NameVirtualHostHandler;
 import io.undertow.server.handlers.ResponseCodeHandler;
-import io.undertow.util.Headers;
 import io.undertow.util.StatusCodes;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

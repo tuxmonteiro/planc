@@ -38,7 +38,7 @@ public class StatsdClient {
     }
 
     public void decr(String metricName, int step, double rate) {
-        client.count(metricName, -1*step, rate);
+        client.count(metricName, -1L * step, rate);
     }
 
     public void decr(String metricName) {

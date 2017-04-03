@@ -3,7 +3,6 @@
  */
 package io.github.tuxmonteiro.planc.handlers;
 
-import io.github.tuxmonteiro.planc.Application;
 import io.github.tuxmonteiro.planc.client.hostselectors.ClientStatisticsMarker;
 import io.github.tuxmonteiro.planc.client.hostselectors.HostSelector;
 import io.github.tuxmonteiro.planc.services.StatsdClient;
