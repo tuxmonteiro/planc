@@ -13,18 +13,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Component;
 
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
-import static io.github.tuxmonteiro.planc.services.ExternalData.PREFIX_KEY;
 import static io.github.tuxmonteiro.planc.services.ExternalData.VIRTUALHOSTS_KEY;
 
 @Component
-@Scope("prototype")
 public class VirtualHostInitializerHandler implements HttpHandler {
 
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
@@ -45,27 +42,16 @@ public class VirtualHostInitializerHandler implements HttpHandler {
     @Override
     public synchronized void handleRequest(HttpServerExchange exchange) throws Exception {
         final String host = exchange.getHostName();
-        final String virtualhostNodePrefix = VIRTUALHOSTS_KEY;
-        final String virtualhostNodeName = virtualhostNodePrefix + "/" + host;
-        boolean existVirtualhostPath = data.listFrom(PREFIX_KEY)
-                                    .stream()
-                                    .filter(node -> node.getKey().equals(virtualhostNodePrefix))
-                                    .count() != 0;
-        if (!existVirtualhostPath) {
-            logger.error(virtualhostNodePrefix + " not found");
+        final String virtualhostNodeName = VIRTUALHOSTS_KEY + "/" + host;
+        if (!data.exist(VIRTUALHOSTS_KEY)) {
+            logger.error(VIRTUALHOSTS_KEY + " not found");
             ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
             return;
         }
 
-        boolean existHost = data.listFrom(virtualhostNodePrefix)
-                .stream()
-                .filter(node -> node.getKey().equals(virtualhostNodeName))
-                .count() != 0;
-
-        if (existHost) {
+        if (data.exist(virtualhostNodeName)) {
             if (virtualhosts.add(host)) {
-                nameVirtualHostHandler.setDefaultHandler(context.getBean(RuleInitializerHandler.class));
-
+                nameVirtualHostHandler.setDefaultHandler(newRuleInitializerHandler());
                 logger.info("add vh " + host + " (nameVirtualHostHandler: " + nameVirtualHostHandler.hashCode() + ")");
             }
             nameVirtualHostHandler.handleRequest(exchange);
@@ -73,6 +59,10 @@ public class VirtualHostInitializerHandler implements HttpHandler {
         }
         logger.error("vh " + host + " not exit (" + virtualhostNodeName + ")");
         ResponseCodeHandler.HANDLE_500.handleRequest(exchange);
+    }
+
+    private RuleInitializerHandler newRuleInitializerHandler() {
+        return context.getBean(RuleInitializerHandler.class);
     }
 
     public synchronized void resetAll() {
