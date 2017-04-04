@@ -56,8 +56,7 @@ public class RuleInitializerHandler implements HttpHandler {
     @Override
     public synchronized void handleRequest(HttpServerExchange exchange) throws Exception {
         String host = exchange.getHostName();
-        final String virtualhostNodeName = VIRTUALHOSTS_KEY + "/" + host;
-        final String rulesNodeName = virtualhostNodeName + "/rules";
+        final String rulesNodeName = VIRTUALHOSTS_KEY + "/" + host + "/rules";
 
         if (rules.isEmpty()) {
             final EtcdNode ruleNode = findRuleNode(rulesNodeName);
@@ -153,7 +152,7 @@ public class RuleInitializerHandler implements HttpHandler {
     }
 
     private Integer extractRuleOrder(String ruleKey) {
-        return Integer.valueOf(Optional.ofNullable(data.node(ruleKey + "/order").getValue()).orElse("0"));
+        return Integer.valueOf(data.node(ruleKey + "/order", ExternalData.GenericNode.ZERO).getValue());
     }
 
     public synchronized void reset() {

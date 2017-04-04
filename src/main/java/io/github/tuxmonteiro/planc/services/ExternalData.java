@@ -15,6 +15,22 @@ import java.util.Optional;
 @Service
 public class ExternalData {
 
+    public enum GenericNode {
+        NULL(new EtcdNode()),
+        EMPTY(new EtcdNode() { public String getValue() { return ""; }}),
+        UNDEF(new EtcdNode() { public String getValue() { return "UNDEF"; }}),
+        ZERO(new EtcdNode() { public String getValue() { return "0"; }});
+
+        private final EtcdNode node;
+        GenericNode(final EtcdNode node) {
+            this.node = node;
+        }
+
+        public EtcdNode get() {
+            return node;
+        }
+    }
+
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
     public static final String ROOT_KEY         = "/";
@@ -24,16 +40,9 @@ public class ExternalData {
     public static final String RESET_ALL_KEY    = PREFIX_KEY + "/reset_all";
 
     private final EtcdClient client;
-    private final EtcdNode nullNode = new EtcdNode();
-    private final EtcdNode emptyNode = nullNode;
-    private final EtcdNode undefNode = nullNode;
-    private final EtcdNode zeroNode = nullNode;
 
     public ExternalData(@Value("#{etcdClient}") final EtcdClient template) {
         this.client = template;
-        emptyNode.setValue("");
-        undefNode.setValue("UNDEF");
-        zeroNode.setValue("0");
     }
 
     public EtcdClient client() {
@@ -57,28 +66,20 @@ public class ExternalData {
     }
 
     public EtcdNode node(String key, boolean recursive) {
+        return node(key, recursive, GenericNode.NULL);
+    }
+
+    public EtcdNode node(String key, GenericNode def) {
+        return node(key, false, def);
+    }
+
+    public EtcdNode node(String key, boolean recursive, GenericNode def) {
         try {
             return client.get(key, recursive).getNode();
         } catch (Exception e) {
             logger.error(e.getMessage());
-            return nullNode;
+            return def.get();
         }
-    }
-
-    public EtcdNode nullNode() {
-        return nullNode;
-    }
-
-    public EtcdNode emptyNode() {
-        return emptyNode;
-    }
-
-    public EtcdNode undefNode() {
-        return undefNode;
-    }
-
-    public EtcdNode zeroNode() {
-        return zeroNode;
     }
 
     public boolean exist(String key) {
