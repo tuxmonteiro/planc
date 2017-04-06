@@ -4,11 +4,15 @@ PLANC
 
 # docker run --rm --name myetcd -d -p 2379:2379 -p 2380:2380 -p 4001:4001 -p 7001:7001 elcolio/etcd:latest -name etcd0
 
-2. Accessing etcd docker service
+2. Using statsd docker service
+
+# docker run -d --rm --name mystatsd -p 8125:8125 -p 8125:8125/udp -v /tmp:/tmp -e STREAM_CMD="tee /tmp/out" sstarcher/statsite
+
+3. Accessing etcd docker service
 
 # docker exec -it myetcd /bin/sh
 
-3. Defining routes in etcd service
+4. Defining routes in etcd service
 
 # etcdctl mkdir /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)
 # etcdctl set /PLANC/virtualhosts/test.com/rules/$(echo '/' | base64)/order 0
@@ -19,10 +23,10 @@ PLANC
 # etcdctl set /PLANC/pools/0/loadbalance ROUNDROBIN
 # etcdctl set /PLANC/pools/0/targets/0 http://127.0.0.1:8080
 
-4. Resetting all
+5. Resetting all
 
 # etcdctl set /PLANC/reset_all 0 --ttl 5
 
-5. Resetting only one virtualhost
+6. Resetting only one virtualhost
 
 # etcdctl set /PLANC/virtualhosts/test.com/reset test.com --ttl 5
