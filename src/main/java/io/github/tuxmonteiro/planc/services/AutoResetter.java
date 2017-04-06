@@ -57,7 +57,7 @@ public class AutoResetter {
 
         virtualhostNodes.forEach(node -> {
             if (hasReset(node)) {
-                String virtualhost = getResetNodeStream(node).findAny().orElse(data.undefNode()).getValue();
+                String virtualhost = getResetNodeStream(node).findAny().orElse(GenericNode.UNDEF.get()).getValue();
                 if (data.endsWith(node,"/" + virtualhost)) {
                     router.reset(virtualhost);
                 } else {
